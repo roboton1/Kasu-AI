@@ -4,170 +4,135 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>貸すAI</title>
-    <style>
-        :root { --main-color: #0084ff; }
-        body { font-family: sans-serif; background: #e5e7eb; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        #chat-container { width: 100%; max-width: 450px; height: 600px; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; border: 4px solid var(--main-color); transition: border-color 0.5s; }
-        .ai-info { display: flex; align-items: center; padding: 15px; background: #f8f9fa; border-bottom: 1px solid #eee; }
-        #ai-img { width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; object-fit: cover; border: 2px solid #ddd; background: #eee; }
+    <style id="mod-style">
+        :root { --main-color: #444; }
+        body { font-family: sans-serif; background: #eee; display: flex; flex-direction: column; align-items: center; padding: 20px; transition: 0.3s; background-size: cover; background-position: center; }
+        #chat-container { width: 100%; max-width: 450px; height: 500px; background: rgba(255,255,255,0.9); border-radius: 15px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #ccc; }
         #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-        .msg { padding: 10px 15px; border-radius: 15px; max-width: 80%; line-height: 1.4; word-wrap: break-word; }
-        .user-msg { background: var(--main-color); color: white; align-self: flex-end; }
-        .ai-msg { background: #f1f0f0; color: #333; align-self: flex-start; }
-        .mutter-msg { font-style: italic; color: #999; font-size: 0.8em; border: 1px dashed #ccc; }
-        .input-area { display: flex; padding: 15px; background: #f8f9fa; gap: 10px; }
-        input[type="text"] { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 25px; outline: none; }
-        button { padding: 10px 20px; background: var(--main-color); color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; }
-        .settings { margin-top: 20px; background: white; padding: 20px; border-radius: 15px; width: 100%; max-width: 410px; box-sizing: border-box; }
-        .status-bar { font-size: 12px; color: #666; padding: 5px 15px; background: #eee; }
-        input[type="file"] { margin: 10px 0; }
-        hr { border: 0; border-top: 1px solid #eee; margin: 15px 0; }
+        .msg { padding: 10px; border-radius: 10px; max-width: 80%; }
+        .user-msg { background: #007bff; color: white; align-self: flex-end; }
+        .ai-msg { background: #e9ecef; align-self: flex-start; }
+        .input-area { display: flex; padding: 10px; background: #f8f9fa; }
+        input[type="text"] { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px; }
+        .admin-panel { margin-top: 20px; background: white; padding: 20px; border-radius: 15px; width: 100%; max-width: 410px; border: 2px solid #000; }
+        .mod-card { border: 1px solid #ddd; padding: 10px; margin-top: 10px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
     </style>
 </head>
-<body>
+<body id="body-bg">
 
 <div id="chat-container">
-    <div class="ai-info">
-        <img id="ai-img" src="">
-        <div>
-            <strong id="ai-name">AI</strong><br>
-            <small id="ai-status">学習中...</small>
-        </div>
+    <div style="padding:10px; background:#333; color:white; display:flex; align-items:center;">
+        <img id="ai-img" src="" style="width:40px; height:40px; border-radius:50%; margin-right:10px;">
+        <strong id="ai-name">AI</strong>
     </div>
     <div id="messages"></div>
-    <div id="status-info" class="status-bar">語彙数: 0</div>
     <div class="input-area">
-        <input type="text" id="user-input" placeholder="なにか教えて...">
+        <input type="text" id="user-input" placeholder="メッセージ...">
         <button onclick="chat()">送信</button>
     </div>
 </div>
 
-<div class="settings">
-    <strong>AIの設定</strong><hr>
-    名前: <input type="text" id="set-name" value="AI"><br><br>
-    アイコン画像: <br>
-    <input type="file" id="image-upload" accept="image/*"><br>
-    <button onclick="saveSettings()">設定を保存</button>
-    <button onclick="resetBrain()" style="background:#ff4757; margin-left: 10px;">脳を初期化</button>
+<div class="admin-panel">
+    <strong>🛡️ 管理者用Modマネージャー</strong><hr>
+    <small>Modファイル(.json)をインポートしてください</small><br>
+    <input type="file" id="mod-upload" accept=".json">
+    <button onclick="importMod()">Modを適用</button>
+    
+    <div id="mod-list-display">
+        </div>
+    <hr>
+    <button onclick="exportCurrentMod()">現在のデータをModとして書き出す</button>
 </div>
 
 <script>
-    // 記憶と設定の読み込み
-    let brain = JSON.parse(localStorage.getItem('ai_brain_v3') || '{}');
-    let config = JSON.parse(localStorage.getItem('ai_config_v3') || '{"name":"たまご","image":""}');
-    let mutterTimer;
+    let currentMod = JSON.parse(localStorage.getItem('active_mod') || '{"aiName":"初期AI","brain":{},"aiImage":"","backgroundImage":""}');
 
-    function updateUI() {
-        document.getElementById('ai-name').innerText = config.name;
-        // 画像が設定されていなければデフォルト画像
-        document.getElementById('ai-img').src = config.image || "https://placehold.jp/150x150.png?text=NoImage";
+    function applyMod(data) {
+        currentMod = data;
+        localStorage.setItem('active_mod', JSON.stringify(currentMod));
         
-        const vocabSize = Object.keys(brain).length;
-        document.getElementById('status-info').innerText = `覚えた文字の種類: ${vocabSize}`;
+        // UIの反映
+        document.getElementById('ai-name').innerText = currentMod.aiName;
+        document.getElementById('ai-img').src = currentMod.aiImage || "https://placehold.jp/150x150.png";
+        if(currentMod.backgroundImage) {
+            document.getElementById('body-bg').style.backgroundImage = `url(${currentMod.backgroundImage})`;
+        }
+        if(currentMod.customCSS) {
+            document.getElementById('mod-style').innerHTML += currentMod.customCSS;
+        }
         
-        const hue = Math.min(vocabSize * 2, 210); 
-        document.documentElement.style.setProperty('--main-color', `hsl(${hue}, 70%, 50%)`);
+        // Modリスト表示の更新
+        document.getElementById('mod-list-display').innerHTML = `
+            <div class="mod-card">
+                <span>適用中: ${currentMod.modName || 'カスタム'}</span>
+                <button onclick="location.reload()">再読み込み</button>
+            </div>`;
     }
 
-    // 画像をBase64形式に変換して保存する
-    function saveSettings() {
-        const nameInput = document.getElementById('set-name').value;
-        const fileInput = document.getElementById('image-upload');
-        const file = fileInput.files[0];
-
-        config.name = nameInput;
-
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                config.image = e.target.result; // 画像をテキストデータ化
-                finishSaving();
-            };
-            reader.readAsDataURL(file);
-        } else {
-            finishSaving();
-        }
+    function importMod() {
+        const file = document.getElementById('mod-upload').files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const json = JSON.parse(e.target.result);
+                applyMod(json);
+                alert("Modを適用しました！");
+            } catch (err) {
+                alert("Modファイルの形式が正しくありません");
+            }
+        };
+        reader.readAsText(file);
     }
 
-    function finishSaving() {
-        localStorage.setItem('ai_config_v3', JSON.stringify(config));
-        updateUI();
-        alert("設定を保存しました！");
+    function exportCurrentMod() {
+        const blob = new Blob([JSON.stringify(currentMod, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentMod.aiName}_mod.json`;
+        a.click();
     }
 
-    function resetBrain() {
-        if(confirm("すべてを忘れて「無能」に戻ってもいいですか？")) {
-            localStorage.clear();
-            location.reload();
-        }
-    }
-
+    // 学習・チャット機能（簡略版）
     function learn(text) {
-        if (text.length < 2) return;
+        let b = currentMod.brain;
         for (let i = 0; i < text.length - 1; i++) {
             let c = text[i], n = text[i+1];
-            if (!brain[c]) brain[c] = [];
-            brain[c].push(n);
+            if (!b[c]) b[c] = [];
+            b[c].push(n);
         }
-        let last = text[text.length - 1];
-        if (!brain[last]) brain[last] = [];
-        brain[last].push(null);
-        localStorage.setItem('ai_brain_v3', JSON.stringify(brain));
-        updateUI();
+        localStorage.setItem('active_mod', JSON.stringify(currentMod));
     }
 
-    function generateReply(input = "") {
-        let keys = Object.keys(brain);
-        if (keys.length === 0) return "......？";
-        let candidates = input.split('').filter(c => brain[c]);
-        let curr = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : keys[Math.floor(Math.random() * keys.length)];
+    function generateReply(input) {
+        let b = currentMod.brain;
+        let keys = Object.keys(b);
+        if (keys.length === 0) return "......";
+        let curr = input[0] && b[input[0]] ? input[0] : keys[Math.floor(Math.random() * keys.length)];
         let res = "";
-        for (let i = 0; i < 25; i++) {
+        for (let i = 0; i < 20; i++) {
             if (!curr) break;
             res += curr;
-            let nexts = brain[curr];
-            curr = nexts[Math.floor(Math.random() * nexts.length)];
+            curr = b[curr] ? b[curr][Math.floor(Math.random() * b[curr].length)] : null;
         }
         return res;
     }
 
-    function addMessage(who, text, type = "") {
-        const msgDiv = document.getElementById('messages');
-        const div = document.createElement('div');
-        div.className = `msg ${who === 'user' ? 'user-msg' : 'ai-msg'} ${type}`;
-        div.innerHTML = `<strong>${who === 'user' ? 'あなた' : config.name}:</strong> ${text}`;
-        msgDiv.appendChild(div);
-        msgDiv.scrollTop = msgDiv.scrollHeight;
-    }
-
     function chat() {
-        const inputElem = document.getElementById('user-input');
-        const text = inputElem.value.trim();
-        if (!text) return;
-
-        addMessage('user', text);
+        const input = document.getElementById('user-input');
+        const text = input.value.trim();
+        if(!text) return;
+        document.getElementById('messages').innerHTML += `<div class="msg user-msg">${text}</div>`;
+        const reply = generateReply(text);
         learn(text);
-        
-        clearTimeout(mutterTimer);
         setTimeout(() => {
-            addMessage('ai', generateReply(text));
-            startMuttering();
-        }, 600);
-        inputElem.value = '';
+            document.getElementById('messages').innerHTML += `<div class="msg ai-msg">${reply}</div>`;
+        }, 500);
+        input.value = '';
     }
 
-    function startMuttering() {
-        clearTimeout(mutterTimer);
-        mutterTimer = setTimeout(() => {
-            if(Object.keys(brain).length > 3) {
-                addMessage('ai', generateReply(), 'mutter-msg');
-            }
-            startMuttering();
-        }, 20000); 
-    }
-
-    updateUI();
-    startMuttering();
+    applyMod(currentMod);
 </script>
 </body>
 </html>
