@@ -13,34 +13,42 @@
         .user-msg { background: var(--main-color); color: white; align-self: flex-end; }
         .ai-msg { background: #eee; align-self: flex-start; }
         .input-area { display: flex; padding: 15px; background: #fff; border-top: 1px solid #ddd; }
-        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 20px; outline: none; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
         
         .panel { margin-top: 20px; background: white; padding: 20px; border-radius: 15px; width: 100%; max-width: 410px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         .mod-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
-        .btn { padding: 8px 15px; border-radius: 20px; border: none; cursor: pointer; font-size: 0.9em; transition: 0.2s; }
+        .btn { padding: 8px 15px; border-radius: 20px; border: none; cursor: pointer; font-size: 0.9em; transition: 0.2s; margin-top: 5px; }
         .btn-blue { background: #007bff; color: white; }
         .btn-green { background: #28a745; color: white; }
+        .btn-red { background: #dc3545; color: white; }
+        hr { border: 0; border-top: 1px solid #eee; margin: 15px 0; }
     </style>
 </head>
 <body id="body-bg">
 
 <div id="chat-container">
     <div style="padding:15px; background:#222; color:white; display:flex; align-items:center;">
-        <img id="ai-img" src="" style="width:40px; height:40px; border-radius:50%; margin-right:10px; background:#fff;">
-        <strong id="ai-name">読み込み中...</strong>
+        <img id="ai-img" src="" style="width:40px; height:40px; border-radius:50%; margin-right:10px; background:#fff; object-fit: cover;">
+        <strong id="ai-name">AI</strong>
     </div>
     <div id="messages"></div>
     <div class="input-area">
-        <input type="text" id="user-input" placeholder="メッセージを入力...">
-        <button class="btn btn-blue" onclick="chat()">送信</button>
+        <input type="text" id="user-input" placeholder="メッセージを入力..." style="flex:1; border-radius: 20px; margin-top:0;">
+        <button class="btn btn-blue" onclick="chat()" style="margin-left:10px; margin-top:0;">送信</button>
     </div>
 </div>
 
 <div class="panel">
-    <strong>💾 あなたの記憶データ (Memory)</strong><hr>
-    <button class="btn btn-green" onclick="exportMemory()">記憶をエクスポート (.json)</button>
+    <strong>⚙️ AIの個別設定</strong><hr>
+    名前: <input type="text" id="edit-name" placeholder="名前を変更">
+    アイコン変更: <input type="file" id="edit-img-file" accept="image/*">
+    背景画像URL: <input type="text" id="edit-bg-url" placeholder="https://...">
+    <button class="btn btn-blue" onclick="savePersonalSettings()" style="width:100%;">設定を保存して適用</button>
+    <hr>
+    <strong>💾 データの管理</strong><br>
+    <button class="btn btn-green" onclick="exportMemory()">現在のデータをエクスポート</button>
     <div style="margin-top:10px;">
-        <small>記憶をインポート:</small><br>
+        <small>データをインポート:</small>
         <input type="file" id="memory-import" accept=".json" onchange="importMemory()">
     </div>
 </div>
@@ -53,36 +61,67 @@
 </div>
 
 <script>
-    // 記憶の土台
-    let currentData = JSON.parse(localStorage.getItem('ai_user_data') || '{"aiName":"AI","brain":{},"aiImage":"","backgroundImage":""}');
+    // 記憶データの読み込み
+    let currentData = JSON.parse(localStorage.getItem('ai_user_data_v4') || '{"aiName":"AI","brain":{},"aiImage":"","backgroundImage":""}');
 
-    // --- 管理者が更新するModリストの設定 ---
-    // あなたがGitHubにJSONを追加したら、ここにもその名前とファイルパスを追記してください
+    // 管理者が更新するリスト
     const PUBLIC_MODS = [
-        { name: "標準AI", path: "mods/default.json" }
+        { name: "標準AI", path: "mods/default.json" },
+        { name: "ツンデレMod", path: "mods/tsundere.json" },
+        { name: "宇宙神Mod", path: "mods/god.json" }
     ];
 
-    function applyData(data) {
-        currentData = data;
-        localStorage.setItem('ai_user_data', JSON.stringify(currentData));
+    function updateView() {
         document.getElementById('ai-name').innerText = currentData.aiName;
         document.getElementById('ai-img').src = currentData.aiImage || "https://placehold.jp/150x150.png?text=AI";
         if(currentData.backgroundImage) {
-            document.getElementById('body-bg').style.backgroundImage = `url(${currentData.backgroundImage})`;
+            document.body.style.backgroundImage = `url(${currentData.backgroundImage})`;
+        } else {
+            document.body.style.backgroundImage = "none";
         }
-        alert("データを反映しました！");
+        // 設定フォームに現在の値をセット
+        document.getElementById('edit-name').value = currentData.aiName;
+        document.getElementById('edit-bg-url').value = currentData.backgroundImage || "";
     }
 
-    // GitHub上のModファイルを読み込む
+    // 設定を保存
+    function savePersonalSettings() {
+        const newName = document.getElementById('edit-name').value;
+        const bgUrl = document.getElementById('edit-bg-url').value;
+        const imgFile = document.getElementById('edit-img-file').files[0];
+
+        currentData.aiName = newName;
+        currentData.backgroundImage = bgUrl;
+
+        if (imgFile) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                currentData.aiImage = e.target.result;
+                finalizeSave();
+            };
+            reader.readAsDataURL(imgFile);
+        } else {
+            finalizeSave();
+        }
+    }
+
+    function finalizeSave() {
+        localStorage.setItem('ai_user_data_v4', JSON.stringify(currentData));
+        updateView();
+        alert("設定を保存しました！");
+    }
+
+    // Modのロード
     async function loadModFromServer(path) {
         try {
             const response = await fetch(path);
-            if (!response.ok) throw new Error("Modが見つかりません");
             const modJson = await response.json();
-            applyData(modJson);
-        } catch (err) {
-            alert("Modの読み込みに失敗しました: " + err.message);
-        }
+            // 学習内容(brain)をマージするか上書きするか選べるが、ここでは分かりやすく上書き
+            currentData = modJson;
+            localStorage.setItem('ai_user_data_v4', JSON.stringify(currentData));
+            updateView();
+            alert("Modをロードしました！");
+        } catch (err) { alert("Mod読み込み失敗"); }
     }
 
     function displayModList() {
@@ -96,30 +135,28 @@
         });
     }
 
-    // 記憶のエクスポート
     function exportMemory() {
         const blob = new Blob([JSON.stringify(currentData, null, 2)], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = `my_ai_memory.json`; a.click();
+        a.href = URL.createObjectURL(blob);
+        a.download = `${currentData.aiName}_data.json`;
+        a.click();
     }
 
-    // 記憶のインポート
     function importMemory() {
         const file = document.getElementById('memory-import').files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (e) => {
-            try {
-                const json = JSON.parse(e.target.result);
-                applyData(json);
-                location.reload();
-            } catch (err) { alert("不正なファイルです"); }
+            currentData = JSON.parse(e.target.result);
+            localStorage.setItem('ai_user_data_v4', JSON.stringify(currentData));
+            updateView();
+            alert("データをインポートしました！");
         };
         reader.readAsText(file);
     }
 
-    // 学習・返信ロジック
+    // チャットロジック
     function learn(text) {
         let b = currentData.brain;
         for (let i = 0; i < text.length - 1; i++) {
@@ -127,7 +164,7 @@
             if (!b[c]) b[c] = [];
             b[c].push(n);
         }
-        localStorage.setItem('ai_user_data', JSON.stringify(currentData));
+        localStorage.setItem('ai_user_data_v4', JSON.stringify(currentData));
     }
 
     function generateReply(input) {
@@ -146,21 +183,18 @@
 
     function chat() {
         const input = document.getElementById('user-input');
-        const text = input.value.trim();
-        if(!text) return;
-        document.getElementById('messages').innerHTML += `<div class="msg user-msg">${text}</div>`;
-        const reply = generateReply(text);
-        learn(text);
+        if(!input.value.trim()) return;
+        document.getElementById('messages').innerHTML += `<div class="msg user-msg">あなた: ${input.value}</div>`;
+        const reply = generateReply(input.value);
+        learn(input.value);
         setTimeout(() => {
-            document.getElementById('messages').innerHTML += `<div class="msg ai-msg">${reply}</div>`;
+            document.getElementById('messages').innerHTML += `<div class="msg ai-msg"><strong>${currentData.aiName}:</strong> ${reply}</div>`;
             document.getElementById('messages').scrollTop = 9999;
         }, 500);
         input.value = '';
     }
 
-    // 初期化
-    document.getElementById('ai-name').innerText = currentData.aiName;
-    document.getElementById('ai-img').src = currentData.aiImage || "https://placehold.jp/150x150.png?text=AI";
+    updateView();
     displayModList();
 </script>
 </body>
