@@ -2,56 +2,104 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>貸すAI</title>
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        #chat-container { width: 100%; max-width: 400px; height: 500px; background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; }
-        #messages { flex: 1; overflow-y: auto; padding: 20px; border-bottom: 1px solid #ddd; }
-        .ai-info { display: flex; align-items: center; padding: 10px; background: #eee; }
-        #ai-img { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; object-fit: cover; }
-        .input-area { display: flex; padding: 10px; }
-        input[type="text"] { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px; }
-        button { margin-left: 5px; padding: 8px 15px; background: #0084ff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        .settings { margin-top: 20px; background: white; padding: 15px; border-radius: 10px; width: 100%; max-width: 400px; font-size: 0.9em; }
+        :root { --main-color: #0084ff; }
+        body { font-family: sans-serif; background: #e5e7eb; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        #chat-container { width: 100%; max-width: 450px; height: 600px; background: white; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; border: 4px solid var(--main-color); transition: border-color 0.5s; }
+        .ai-info { display: flex; align-items: center; padding: 15px; background: #f8f9fa; border-bottom: 1px solid #eee; }
+        #ai-img { width: 60px; height: 60px; border-radius: 50%; margin-right: 15px; object-fit: cover; border: 2px solid #ddd; background: #eee; }
+        #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .msg { padding: 10px 15px; border-radius: 15px; max-width: 80%; line-height: 1.4; word-wrap: break-word; }
+        .user-msg { background: var(--main-color); color: white; align-self: flex-end; }
+        .ai-msg { background: #f1f0f0; color: #333; align-self: flex-start; }
+        .mutter-msg { font-style: italic; color: #999; font-size: 0.8em; border: 1px dashed #ccc; }
+        .input-area { display: flex; padding: 15px; background: #f8f9fa; gap: 10px; }
+        input[type="text"] { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 25px; outline: none; }
+        button { padding: 10px 20px; background: var(--main-color); color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; }
+        .settings { margin-top: 20px; background: white; padding: 20px; border-radius: 15px; width: 100%; max-width: 410px; box-sizing: border-box; }
+        .status-bar { font-size: 12px; color: #666; padding: 5px 15px; background: #eee; }
+        input[type="file"] { margin: 10px 0; }
+        hr { border: 0; border-top: 1px solid #eee; margin: 15px 0; }
     </style>
 </head>
 <body>
 
 <div id="chat-container">
     <div class="ai-info">
-        <img id="ai-img" src="https://placehold.jp/150x150.png">
-        <strong id="ai-name">AI</strong>
+        <img id="ai-img" src="">
+        <div>
+            <strong id="ai-name">AI</strong><br>
+            <small id="ai-status">学習中...</small>
+        </div>
     </div>
     <div id="messages"></div>
+    <div id="status-info" class="status-bar">語彙数: 0</div>
     <div class="input-area">
-        <input type="text" id="user-input" placeholder="何か話しかけて...">
+        <input type="text" id="user-input" placeholder="なにか教えて...">
         <button onclick="chat()">送信</button>
     </div>
 </div>
 
 <div class="settings">
-    <strong>設定</strong><br>
-    名前: <input type="text" id="set-name" value="AI"><br>
-    画像URL: <input type="text" id="set-image" value="https://placehold.jp/150x150.png"><br>
+    <strong>AIの設定</strong><hr>
+    名前: <input type="text" id="set-name" value="AI"><br><br>
+    アイコン画像: <br>
+    <input type="file" id="image-upload" accept="image/*"><br>
     <button onclick="saveSettings()">設定を保存</button>
+    <button onclick="resetBrain()" style="background:#ff4757; margin-left: 10px;">脳を初期化</button>
 </div>
 
 <script>
-    // 記憶をブラウザから読み込む
-    let brain = JSON.parse(localStorage.getItem('ai_brain') || '{}');
-    let config = JSON.parse(localStorage.getItem('ai_config') || '{"name":"AI","image":"https://placehold.jp/150x150.png"}');
+    // 記憶と設定の読み込み
+    let brain = JSON.parse(localStorage.getItem('ai_brain_v3') || '{}');
+    let config = JSON.parse(localStorage.getItem('ai_config_v3') || '{"name":"たまご","image":""}');
+    let mutterTimer;
 
-    function updateDisplay() {
+    function updateUI() {
         document.getElementById('ai-name').innerText = config.name;
-        document.getElementById('ai-img').src = config.image;
+        // 画像が設定されていなければデフォルト画像
+        document.getElementById('ai-img').src = config.image || "https://placehold.jp/150x150.png?text=NoImage";
+        
+        const vocabSize = Object.keys(brain).length;
+        document.getElementById('status-info').innerText = `覚えた文字の種類: ${vocabSize}`;
+        
+        const hue = Math.min(vocabSize * 2, 210); 
+        document.documentElement.style.setProperty('--main-color', `hsl(${hue}, 70%, 50%)`);
     }
 
+    // 画像をBase64形式に変換して保存する
     function saveSettings() {
-        config.name = document.getElementById('set-name').value;
-        config.image = document.getElementById('set-image').value;
-        localStorage.setItem('ai_config', JSON.stringify(config));
-        updateDisplay();
+        const nameInput = document.getElementById('set-name').value;
+        const fileInput = document.getElementById('image-upload');
+        const file = fileInput.files[0];
+
+        config.name = nameInput;
+
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                config.image = e.target.result; // 画像をテキストデータ化
+                finishSaving();
+            };
+            reader.readAsDataURL(file);
+        } else {
+            finishSaving();
+        }
+    }
+
+    function finishSaving() {
+        localStorage.setItem('ai_config_v3', JSON.stringify(config));
+        updateUI();
         alert("設定を保存しました！");
+    }
+
+    function resetBrain() {
+        if(confirm("すべてを忘れて「無能」に戻ってもいいですか？")) {
+            localStorage.clear();
+            location.reload();
+        }
     }
 
     function learn(text) {
@@ -64,18 +112,17 @@
         let last = text[text.length - 1];
         if (!brain[last]) brain[last] = [];
         brain[last].push(null);
-        localStorage.setItem('ai_brain', JSON.stringify(brain));
+        localStorage.setItem('ai_brain_v3', JSON.stringify(brain));
+        updateUI();
     }
 
-    function generateReply(input) {
+    function generateReply(input = "") {
         let keys = Object.keys(brain);
-        if (keys.length === 0) return "まだ何も知らないよ...";
-        
+        if (keys.length === 0) return "......？";
         let candidates = input.split('').filter(c => brain[c]);
         let curr = candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : keys[Math.floor(Math.random() * keys.length)];
-        
         let res = "";
-        for (let i = 0; i < 30; i++) {
+        for (let i = 0; i < 25; i++) {
             if (!curr) break;
             res += curr;
             let nexts = brain[curr];
@@ -84,26 +131,43 @@
         return res;
     }
 
+    function addMessage(who, text, type = "") {
+        const msgDiv = document.getElementById('messages');
+        const div = document.createElement('div');
+        div.className = `msg ${who === 'user' ? 'user-msg' : 'ai-msg'} ${type}`;
+        div.innerHTML = `<strong>${who === 'user' ? 'あなた' : config.name}:</strong> ${text}`;
+        msgDiv.appendChild(div);
+        msgDiv.scrollTop = msgDiv.scrollHeight;
+    }
+
     function chat() {
         const inputElem = document.getElementById('user-input');
         const text = inputElem.value.trim();
         if (!text) return;
 
-        const msgDiv = document.getElementById('messages');
-        msgDiv.innerHTML += `<div><strong>あなた:</strong> ${text}</div>`;
-        
-        const reply = generateReply(text);
+        addMessage('user', text);
         learn(text);
         
+        clearTimeout(mutterTimer);
         setTimeout(() => {
-            msgDiv.innerHTML += `<div><strong>${config.name}:</strong> ${reply}</div>`;
-            msgDiv.scrollTop = msgDiv.scrollHeight;
-        }, 500);
-
+            addMessage('ai', generateReply(text));
+            startMuttering();
+        }, 600);
         inputElem.value = '';
     }
 
-    updateDisplay();
+    function startMuttering() {
+        clearTimeout(mutterTimer);
+        mutterTimer = setTimeout(() => {
+            if(Object.keys(brain).length > 3) {
+                addMessage('ai', generateReply(), 'mutter-msg');
+            }
+            startMuttering();
+        }, 20000); 
+    }
+
+    updateUI();
+    startMuttering();
 </script>
 </body>
 </html>
