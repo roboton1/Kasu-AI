@@ -4,14 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>貸すAI</title>
-    <style id="mod-style">
-        <<<<<<< HEAD :root {
+    <title>AI Chaos Conference Ultimate</title>
+    <style>
+        :root {
             --main-color: #007bff;
         }
 
         body {
-            font-family: sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             background: #f4f7f6;
             display: flex;
             flex-direction: column;
@@ -22,16 +22,43 @@
             background-position: center;
         }
 
+        /* UI Components */
+        .tab-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .tab-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            background: #ddd;
+            font-weight: bold;
+            font-size: 0.9em;
+            transition: 0.2s;
+        }
+
+        .tab-btn.active {
+            background: var(--main-color);
+            color: white;
+            transform: scale(1.05);
+        }
+
         #chat-container {
             width: 100%;
-            max-width: 450px;
-            height: 500px;
+            max-width: 500px;
+            height: 650px;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 15px;
             display: flex;
             flex-direction: column;
             overflow: hidden;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            position: relative;
         }
 
         #messages {
@@ -40,60 +67,96 @@
             padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 15px;
+            scroll-behavior: smooth;
         }
 
-        .msg {
-            padding: 10px 15px;
+        /* Chat Bubbles */
+        .chat-row {
+            display: flex;
+            align-items: flex-end;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .chat-row.right {
+            flex-direction: row-reverse;
+        }
+
+        .chat-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            margin: 0 8px;
+            border: 1px solid #ccc;
+            background: white;
+            flex-shrink: 0;
+        }
+
+        .msg-content {
+            display: flex;
+            flex-direction: column;
+            max-width: 75%;
+        }
+
+        .msg-name {
+            font-size: 0.7em;
+            color: #666;
+            margin-bottom: 2px;
+            margin-left: 5px;
+        }
+
+        .right .msg-name {
+            text-align: right;
+            margin-right: 5px;
+        }
+
+        .msg-bubble {
+            padding: 8px 12px;
             border-radius: 15px;
-            max-width: 80%;
             line-height: 1.4;
+            word-wrap: break-word;
+            font-size: 0.95em;
         }
 
-        .user-msg {
+        .right .msg-bubble {
             background: var(--main-color);
             color: white;
-            align-self: flex-end;
+            border-bottom-right-radius: 2px;
         }
 
-        .ai-msg {
+        .left .msg-bubble {
             background: #eee;
-            align-self: flex-start;
+            color: #333;
+            border-bottom-left-radius: 2px;
         }
 
+        /* Controls */
         .input-area {
             display: flex;
-            padding: 15px;
+            padding: 10px;
             background: #fff;
             border-top: 1px solid #ddd;
         }
 
-        input[type="text"],
-        input[type="file"] {
-            width: 100%;
-            padding: 8px;
-            margin-top: 5px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-sizing: border-box;
-        }
-
-        .panel {
-            margin-top: 20px;
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            width: 100%;
-            max-width: 410px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        }
-
-        .mod-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        input[type="text"] {
+            flex: 1;
             padding: 10px;
-            border-bottom: 1px solid #eee;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            outline: none;
         }
 
         .btn {
@@ -102,273 +165,561 @@
             border: none;
             cursor: pointer;
             font-size: 0.9em;
+            margin-left: 5px;
+            color: white;
             transition: 0.2s;
-            margin-top: 5px;
+            white-space: nowrap;
         }
 
         .btn-blue {
             background: #007bff;
-            color: white;
         }
 
         .btn-green {
             background: #28a745;
-            color: white;
         }
 
         .btn-red {
             background: #dc3545;
-            color: white;
         }
 
-        hr {
-            border: 0;
-            border-top: 1px solid #eee;
-            margin: 15px 0;
+        .btn-danger {
+            background: #ff4444;
+            font-weight: bold;
+        }
+
+        .btn:hover {
+            opacity: 0.8;
+        }
+
+        /* Conference Settings Overlay */
+        #conf-settings {
+            position: absolute;
+            top: 50px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.98);
+            padding: 20px;
+            overflow-y: auto;
+            display: none;
+            z-index: 10;
+        }
+
+        .section-title {
+            font-size: 0.9em;
+            font-weight: bold;
+            color: #555;
+            border-bottom: 2px solid #eee;
+            margin: 15px 0 10px 0;
+            padding-bottom: 5px;
+        }
+
+        .clone-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            animation: fadeIn 0.2s;
+        }
+
+        .clone-item input {
+            padding: 5px 10px;
+            margin-right: 5px;
+            flex: 1;
+        }
+
+        .mod-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #f9f9f9;
+        }
+
+        .mod-item input[type="checkbox"] {
+            transform: scale(1.3);
+            margin-right: 10px;
+        }
+
+        /* Panel */
+        .panel {
+            margin-top: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            width: 100%;
+            max-width: 460px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            margin-top: 5px;
         }
     </style>
 </head>
 
 <body id="body-bg">
 
+    <div class="tab-container">
+        <button class="tab-btn active" onclick="switchMode('chat')">💬 育成＆対話</button>
+        <button class="tab-btn" onclick="switchMode('conference')">🤖 AI会議 (最大16人)</button>
+        <button class="tab-btn" onclick="toggleSettings()">⚙️ 設定</button>
+    </div>
+
     <div id="chat-container">
-        <div style="padding:15px; background:#222; color:white; display:flex; align-items:center;">
-            <img id="ai-img" src=""
-                style="width:40px; height:40px; border-radius:50%; margin-right:10px; background:#fff; object-fit: cover;">
-            <strong id="ai-name">AI</strong>
+        <div
+            style="padding:12px; background:#222; color:white; display:flex; justify-content:space-between; align-items:center;">
+            <span id="header-title">AI Chat Room</span>
+            <div id="conf-header-controls" style="display:none;">
+                <small style="color:#aaa; margin-right:10px;">学習中...</small>
+                <button id="conf-toggle-btn" class="btn btn-green" style="font-size:0.8em; padding:4px 10px;"
+                    onclick="toggleConference()">開始 ▶</button>
+            </div>
         </div>
+
         <div id="messages"></div>
+
+        <div id="conf-settings">
+            <h3>📋 会議メンバー編成</h3>
+
+            <div class="section-title">👤 プレイヤー参加</div>
+            <div class="mod-item">
+                <input type="checkbox" id="chk-user" checked>
+                <span>あなた (プレイヤー)</span>
+            </div>
+
+            <div class="section-title">
+                🧬 マイAI (あなたの学習データ)
+                <button class="btn btn-blue" style="font-size:0.7em; padding:2px 8px; margin-left:10px;"
+                    onclick="addMyAIClone()">+ 追加</button>
+            </div>
+            <div id="my-ai-clones-list">
+            </div>
+
+            <div class="section-title">📦 公開Mod AI</div>
+            <div id="mod-list-select">
+            </div>
+        </div>
+
         <div class="input-area">
-            <input type="text" id="user-input" placeholder="メッセージを入力..."
-                style="flex:1; border-radius: 20px; margin-top:0;">
-            <button class="btn btn-blue" onclick="chat()" style="margin-left:10px; margin-top:0;">送信</button>
+            <input type="text" id="user-input" placeholder="メッセージを入力...">
+            <button class="btn btn-blue" onclick="sendMessage()">送信</button>
         </div>
     </div>
 
-    <div class="panel">
-        <strong>⚙️ AIの個別設定</strong>
+    <div id="settings-panel" class="panel">
+        <strong>⚙️ 基本設定</strong>
         <hr>
-        名前: <input type="text" id="edit-name" placeholder="名前を変更">
-        アイコン変更: <input type="file" id="edit-img-file" accept="image/*">
-        背景画像URL: <input type="text" id="edit-bg-url" placeholder="https://...">
-        <button class="btn btn-blue" onclick="savePersonalSettings()" style="width:100%;">設定を保存して適用</button>
+        あなたの名前: <input type="text" id="user-name" placeholder="あなた"><br>
+        あなたのアイコン: <input type="file" id="user-icon-file" accept="image/*"><br>
         <hr>
-        <strong>💾 データの管理</strong><br>
-        <button class="btn btn-green" onclick="exportMemory()">現在のデータをエクスポート</button>
-        <div style="margin-top:10px;">
-            <small>データをインポート:</small>
-            <input type="file" id="memory-import" accept=".json" onchange="importMemory()">
-        </div>
-        =======
-        :root { --main-color: #007bff; }
-        body { font-family: sans-serif; background: #f4f7f6; display: flex; flex-direction: column; align-items: center;
-        padding: 20px; transition: 0.3s; background-size: cover; background-position: center; }
-        #chat-container { width: 100%; max-width: 450px; height: 500px; background: rgba(255,255,255,0.95);
-        border-radius: 15px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 15px
-        rgba(0,0,0,0.1); }
-        #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
-        .msg { padding: 10px 15px; border-radius: 15px; max-width: 80%; line-height: 1.4; }
-        .user-msg { background: var(--main-color); color: white; align-self: flex-end; }
-        .ai-msg { background: #eee; align-self: flex-start; }
-        .input-area { display: flex; padding: 15px; background: #fff; border-top: 1px solid #ddd; }
-        input[type="text"], input[type="file"] { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ddd;
-        border-radius: 5px; box-sizing: border-box; }
+        AIの名前: <input type="text" id="edit-ai-name">
+        AIアイコン: <input type="file" id="edit-ai-file" accept="image/*">
+        背景URL: <input type="text" id="edit-bg-url">
+        <button class="btn btn-blue" onclick="saveSettings()" style="width:100%; margin-top:10px;">設定保存</button>
 
-        .panel { margin-top: 20px; background: white; padding: 20px; border-radius: 15px; width: 100%; max-width: 410px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
-        .mod-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom:
-        1px solid #eee; }
-        .btn { padding: 8px 15px; border-radius: 20px; border: none; cursor: pointer; font-size: 0.9em; transition:
-        0.2s; margin-top: 5px; }
-        .btn-blue { background: #007bff; color: white; }
-        .btn-green { background: #28a745; color: white; }
-        .btn-red { background: #dc3545; color: white; }
-        hr { border: 0; border-top: 1px solid #eee; margin: 15px 0; }
-        </style>
-        </head>
+        <hr>
+        <strong>🚨 危険なボタン</strong><br>
+        <button class="btn btn-danger" onclick="resetMemory()">⚠️ 学習データを全消去</button>
 
-        <body id="body-bg">
+        <hr>
+        <strong>💾 データ管理</strong><br>
+        <button class="btn btn-green" onclick="exportMemory()">エクスポート</button>
+        <input type="file" id="memory-import" accept=".json" onchange="importMemory()" style="margin-top:5px;">
 
-            <div id="chat-container">
-                <div style="padding:15px; background:#222; color:white; display:flex; align-items:center;">
-                    <img id="ai-img" src=""
-                        style="width:40px; height:40px; border-radius:50%; margin-right:10px; background:#fff; object-fit: cover;">
-                    <strong id="ai-name">AI</strong>
+        <hr>
+        <strong>📦 Modロード</strong><br>
+        <div id="mod-load-list"></div>
+    </div>
+
+    <script>
+        // --- データ初期化 ---
+        let data = JSON.parse(localStorage.getItem('ai_data_v7') || JSON.stringify({
+            userName: "あなた",
+            userImage: "https://placehold.jp/150x150.png?text=YOU",
+            aiName: "マイAI",
+            aiImage: "https://placehold.jp/150x150.png?text=AI",
+            backgroundImage: "",
+            brain: {}
+        }));
+
+        // Mod定義
+        const PUBLIC_MODS = [
+            { name: "標準AI", path: "mods/default.json" }
+        ];
+
+        let mode = 'chat';
+        let conferenceRunning = false;
+        let conferenceTimer = null;
+        let activeMembers = [];
+        let loadedModsData = [];
+        let myAICloneCount = 0;
+        let relations = {};
+
+        const MOOD_PHRASES = {
+            fight: ["は？", "意味不明。", "ふざけるな。", "違う。", "黙れ。"],
+            friend: ["わかる！", "確かに。", "最高だね。", "賛成！", "だよね。"]
+        };
+
+        window.onload = async () => {
+            updateUI();
+            renderModLoadList();
+            // Mod先読み
+            for (let mod of PUBLIC_MODS) {
+                try {
+                    const res = await fetch(mod.path);
+                    if (res.ok) loadedModsData.push(await res.json());
+                } catch (e) { }
+            }
+            // 初期状態でマイAIを1体リストに追加
+            addMyAIClone();
+        }
+
+        function updateUI() {
+            document.getElementById('user-name').value = data.userName;
+            document.getElementById('edit-ai-name').value = data.aiName;
+            document.getElementById('edit-bg-url').value = data.backgroundImage || "";
+            document.body.style.backgroundImage = data.backgroundImage ? `url(${data.backgroundImage})` : "none";
+        }
+
+        // --- マイAIクローン管理 ---
+        function addMyAIClone() {
+            const list = document.getElementById('my-ai-clones-list');
+            const currentCount = list.children.length;
+            if (currentCount >= 56) { alert("上限です！"); return; }
+
+            myAICloneCount++;
+            const div = document.createElement('div');
+            div.className = 'clone-item';
+            div.innerHTML = `
+            <img src="${data.aiImage}" style="width:30px; height:30px; border-radius:50%; margin-right:5px;">
+            <input type="text" value="${data.aiName} ${myAICloneCount > 1 ? myAICloneCount : ''}" class="clone-name-input">
+            <button class="btn btn-red" style="padding:2px 8px; font-size:0.8em;" onclick="this.parentElement.remove()">×</button>
+        `;
+            list.appendChild(div);
+        }
+
+        function renderModSelect() {
+            const list = document.getElementById('mod-list-select');
+            list.innerHTML = "";
+            loadedModsData.forEach((mod, idx) => {
+                list.innerHTML += `
+                <div class="mod-item">
+                    <input type="checkbox" id="chk-mod-${idx}" value="${idx}">
+                    <img src="${mod.aiImage || ''}" style="width:30px; height:30px; border-radius:50%; margin-right:5px;">
+                    <span>${mod.aiName}</span>
                 </div>
-                <div id="messages"></div>
-                <div class="input-area">
-                    <input type="text" id="user-input" placeholder="メッセージを入力..."
-                        style="flex:1; border-radius: 20px; margin-top:0;">
-                    <button class="btn btn-blue" onclick="chat()" style="margin-left:10px; margin-top:0;">送信</button>
-                    >>>>>>> 98b55bb8a58d9ee250b98df2c69bfb996c92d16f
-                </div>
+            `;
+            });
+        }
 
-                <div class="panel">
-                    <strong>📦 公開Modリスト</strong>
-                    <hr>
-                    <div id="mod-list-display">
-                        <small>Modを読み込み中...</small>
-                    </div>
-                </div>
+        // --- モード切替 ---
+        function switchMode(newMode) {
+            mode = newMode;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('settings-panel').style.display = 'none';
+            stopConference();
+            document.getElementById('messages').innerHTML = "";
 
-                <script>
-                    // 記憶データの読み込み
-                    let currentData = JSON.parse(localStorage.getItem('ai_user_data_v4') || '{"aiName":"AI","brain":{},"aiImage":"","backgroundImage":""}');
+            const confSettings = document.getElementById('conf-settings');
+            const confControls = document.getElementById('conf-header-controls');
+            const header = document.getElementById('header-title');
 
-                    // 管理者が更新するリスト
-                    const PUBLIC_MODS = [
-                        { name: "標準AI", path: "mods/default.json" }
-                    ];
+            if (mode === 'conference') {
+                header.innerText = "会議セットアップ";
+                confControls.style.display = 'block';
+                confSettings.style.display = 'block';
+                renderModSelect();
+            } else {
+                header.innerText = data.aiName;
+                confControls.style.display = 'none';
+                confSettings.style.display = 'none';
+            }
+        }
 
-                    function updateView() {
-                        document.getElementById('ai-name').innerText = currentData.aiName;
-                        document.getElementById('ai-img').src = currentData.aiImage || "https://placehold.jp/150x150.png?text=AI";
-                        if (currentData.backgroundImage) {
-                            document.body.style.backgroundImage = `url(${currentData.backgroundImage})`;
-                        } else {
-                            document.body.style.backgroundImage = "none";
-                        }
-                        // 設定フォームに現在の値をセット
-                        document.getElementById('edit-name').value = currentData.aiName;
-                        document.getElementById('edit-bg-url').value = currentData.backgroundImage || "";
-                    }
+        function toggleSettings() {
+            const p = document.getElementById('settings-panel');
+            p.style.display = p.style.display === 'block' ? 'none' : 'block';
+        }
 
-                    // 設定を保存
-                    function savePersonalSettings() {
-                        const newName = document.getElementById('edit-name').value;
-                        const bgUrl = document.getElementById('edit-bg-url').value;
-                        const imgFile = document.getElementById('edit-img-file').files[0];
+        // --- 会議システム ---
+        // --- 会議システム ---
+        function toggleConference() {
+            if (conferenceRunning) { stopConference(); return; }
 
-                        currentData.aiName = newName;
-                        currentData.backgroundImage = bgUrl;
+            activeMembers = [];
+            if (document.getElementById('chk-user').checked) {
+                activeMembers.push({ type: 'user', name: data.userName, image: data.userImage });
+            }
+            document.querySelectorAll('.clone-name-input').forEach(input => {
+                activeMembers.push({ type: 'ai', name: input.value, image: data.aiImage });
+            });
 
-                        if (imgFile) {
-                            const reader = new FileReader();
-                            reader.onload = function (e) {
-                                currentData.aiImage = e.target.result;
-                                finalizeSave();
-                            };
-                            reader.readAsDataURL(imgFile);
-                        } else {
-                            finalizeSave();
-                        }
-                    }
+            if (activeMembers.length < 2) return alert("2人以上必要です");
 
-<<<<<<< HEAD
-                    function finalizeSave() {
-                        localStorage.setItem('ai_user_data_v4', JSON.stringify(currentData));
-                        updateView();
-                        alert("設定を保存しました！");
-                    }
+            conferenceRunning = true;
+            const btn = document.getElementById('conf-toggle-btn');
+            btn.innerText = "停止 ■"; btn.className = "btn btn-red";
+            document.getElementById('conf-settings').style.display = 'none';
+            document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
 
-                    // Modのロード
-                    async function loadModFromServer(path) {
-                        try {
-                            const response = await fetch(path);
-                            const modJson = await response.json();
-                            // 学習内容(brain)をマージするか上書きするか選べるが、ここでは分かりやすく上書き
-                            currentData = modJson;
-                            localStorage.setItem('ai_user_data_v4', JSON.stringify(currentData));
-                            updateView();
-                            alert("Modをロードしました！");
-                        } catch (err) { alert("Mod読み込み失敗"); }
-                    }
+            addBubble("システム", "会議開始。AIたちは互いに学習し、関係を築きます。", "", false);
+            runConferenceLoop("");
+        }
 
-                    function displayModList() {
-                        const listDiv = document.getElementById('mod-list-display');
-                        listDiv.innerHTML = "";
-                        PUBLIC_MODS.forEach(mod => {
-                            const item = document.createElement('div');
-                            item.className = 'mod-item';
-                            item.innerHTML = `<span>${mod.name}</span><button class="btn btn-blue" onclick="loadModFromServer('${mod.path}')">ロード</button>`;
-                            listDiv.appendChild(item);
-                        });
-                    }
+        function stopConference() {
+            conferenceRunning = false;
+            clearTimeout(conferenceTimer);
+            const btn = document.getElementById('conf-toggle-btn');
+            if (btn) { btn.innerText = "開始 ▶"; btn.className = "btn btn-green"; }
+            if (mode === 'conference') {
+                document.getElementById('conf-settings').style.display = 'block';
+                document.getElementById('header-title').innerText = "会議セットアップ";
+            }
+        }
+        function runConferenceLoop(lastTopic) {
+            if (!conferenceRunning) return;
 
-                    function exportMemory() {
-                        const blob = new Blob([JSON.stringify(currentData, null, 2)], { type: 'application/json' });
-                        const a = document.createElement('a');
-                        a.href = URL.createObjectURL(blob);
-                        a.download = `${currentData.aiName}_data.json`;
-                        a.click();
-                    }
+            // 1. 話者を選ぶ
+            const ais = activeMembers.filter(m => m.type === 'ai');
+            if (ais.length === 0) return;
+            const speaker = ais[Math.floor(Math.random() * ais.length)];
 
-                    function importMemory() {
-                        const file = document.getElementById('memory-import').files[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            currentData = JSON.parse(e.target.result);
-                            localStorage.setItem('ai_user_data_v4', JSON.stringify(currentData));
-                            updateView();
-                            alert("データをインポートしました！");
-                        };
-                        reader.readAsText(file);
-                    }
+            // 2. 直前の話者との関係をチェック
+            const lastSpeakerRow = document.querySelector('.chat-row:last-child .msg-name');
+            const lastSpeakerName = lastSpeakerRow ? lastSpeakerRow.innerText.split('<')[0].trim() : "";
+            let relKey = [speaker.name, lastSpeakerName].sort().join('-');
 
-                    // チャットロジック
-                    function learn(text) {
-                        let b = currentData.brain;
-                        for (let i = 0; i < text.length - 1; i++) {
-                            let c = text[i], n = text[i + 1];
-                            if (!b[c]) b[c] = [];
-                            b[c].push(n);
-                        }
-                        localStorage.setItem('ai_user_data_v4', JSON.stringify(currentData));
-                    }
+            // ★重要：ここで「とりあえず空っぽ」で定義しておく
+            let prefix = "";
+            let tag = "";
 
-                    function generateReply(input) {
-                        let b = currentData.brain;
-                        let keys = Object.keys(b);
-                        if (keys.length === 0) return "......";
-                        let curr = input[0] && b[input[0]] ? input[0] : keys[Math.floor(Math.random() * keys.length)];
-                        let res = "";
-                        for (let i = 0; i < 20; i++) {
-                            if (!curr) break;
-                            res += curr;
-                            curr = b[curr] ? b[curr][Math.floor(Math.random() * b[curr].length)] : null;
-                        }
-                        return res;
-                    }
+            // 3. 関係性がある場合のみ上書きする
+            if (lastSpeakerName && speaker.name !== lastSpeakerName) {
+                if (!relations[relKey]) relations[relKey] = 0;
 
-                    function chat() {
-                        const input = document.getElementById('user-input');
-                        if (!input.value.trim()) return;
-                        document.getElementById('messages').innerHTML += `<div class="msg user-msg">あなた: ${input.value}</div>`;
-                        const reply = generateReply(input.value);
-                        learn(input.value);
-                        setTimeout(() => {
-                            document.getElementById('messages').innerHTML += `<div class="msg ai-msg"><strong>${currentData.aiName}:</strong> ${reply}</div>`;
-                            document.getElementById('messages').scrollTop = 9999;
-                        }, 500);
-                        input.value = '';
-                    }
+                // 確率で関係が変化
+                const rnd = Math.random();
+                if (rnd > 0.92) relations[relKey] -= 10; // 喧嘩
+                else if (rnd < 0.08) relations[relKey] += 10; // 同盟
 
-                    updateView();
-                    displayModList();
-                </script>
-        </body>
+                // 関係性に応じたセリフとタグをセット
+                if (relations[relKey] <= -20) {
+                    prefix = MOOD_PHRASES.fight[Math.floor(Math.random() * MOOD_PHRASES.fight.length)];
+                    tag = '<span class="relation-tag tag-enemy">喧嘩</span>';
+                } else if (relations[relKey] >= 20) {
+                    prefix = MOOD_PHRASES.friend[Math.floor(Math.random() * MOOD_PHRASES.friend.length)];
+                    tag = '<span class="relation-tag tag-friend">同盟</span>';
+                }
+            }
 
-</html>
-=======
-function chat() {
-const input = document.getElementById('user-input');
-if(!input.value.trim()) return;
-document.getElementById('messages').innerHTML += `<div class="msg user-msg">あなた: ${input.value}</div>`;
-const reply = generateReply(input.value);
-learn(input.value);
-setTimeout(() => {
-document.getElementById('messages').innerHTML += `<div class="msg ai-msg"><strong>${currentData.aiName}:</strong>
-    ${reply}</div>`;
-document.getElementById('messages').scrollTop = 9999;
-}, 500);
-input.value = '';
-}
+            conferenceTimer = setTimeout(() => {
+                if (!conferenceRunning) return;
 
-updateView();
-displayModList();
-</script>
+                // 4. 生成と学習（オウム返し防止込み）
+                const body = generate(data.brain, lastTopic);
+                const fullMsg = prefix + body; // ここでエラーが出なくなります
+
+                learn(data.brain, fullMsg);
+                saveData();
+
+                addBubble(speaker.name + tag, fullMsg, speaker.image, false);
+
+                // 5. 次のループへ
+                runConferenceLoop(fullMsg);
+            }, 1500 + Math.random() * 2500);
+        }
+
+        // --- AIコア ---
+        function learn(brain, text) {
+            if (!text || text.length < 2) return;
+            for (let i = 0; i < text.length - 1; i++) {
+                let c = text[i], n = text[i + 1];
+                if (!brain[c]) brain[c] = [];
+
+                // 同じ繋がりを覚えすぎないように上限(100)を設ける
+                // これにより、特定の言葉に執着しすぎるのを防ぎ、ランダム性を維持します
+                if (brain[c].length < 100) {
+                    brain[c].push(n);
+                }
+            }
+        }
+        // --- メッセージ処理 ---
+        function sendMessage() {
+            const input = document.getElementById('user-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            addBubble(data.userName, text, data.userImage, true);
+            input.value = '';
+
+            // ★ユーザーの発言も即学習
+            learn(data.brain, text);
+            saveData();
+
+            if (mode === 'chat') {
+                setTimeout(() => {
+                    const reply = generate(data.brain, text);
+                    addBubble(data.aiName, reply, data.aiImage, false);
+                    learn(data.brain, reply); // 自分の発言も反復学習
+                    saveData();
+                }, 500);
+            } else if (conferenceRunning) {
+                // ユーザー発言で会議の流れを変える
+                clearTimeout(conferenceTimer);
+                setTimeout(() => runConferenceLoop(text), 1000);
+            }
+        }
+
+        // --- AIコア ---
+        function learn(brain, text) {
+            if (!text || text.length < 2) return;
+            for (let i = 0; i < text.length - 1; i++) {
+                let c = text[i], n = text[i + 1];
+                if (!brain[c]) brain[c] = [];
+                brain[c].push(n);
+            }
+        }
+        function generate(brain, input) {
+            let keys = Object.keys(brain);
+            if (keys.length === 0) return "......";
+
+            // 【旧制度の復活】入力された文字から開始、なければランダム
+            // 入力された文字の「0番目（最初）」から開始しようとするため、変な文字を引き継ぐ
+            // 入力（前の発言）の中からランダムに一文字選んで開始する（話題のリセット＆引き継ぎ）
+            let startChar = "";
+            if (input && input.length > 0) {
+                // 前の発言に含まれる文字の中から、脳が知っている文字をランダムに選ぶ
+                const validChars = input.split('').filter(c => brain[c]);
+                if (validChars.length > 0) {
+                    startChar = validChars[Math.floor(Math.random() * validChars.length)];
+                }
+            }
+            // 適切な開始文字がなければ、脳の全データからランダムに選ぶ
+            let curr = startChar || keys[Math.floor(Math.random() * keys.length)];
+            let res = "";
+            for (let i = 0; i < 20; i++) {
+                res += curr;
+                let nexts = brain[curr];
+                if (!nexts) break;
+
+                // 素直に学習データから選ぶ（ここが「昔の良さ」）
+                let nextChar = nexts[Math.floor(Math.random() * nexts.length)];
+
+                // 連続しすぎ（あああ...）の時だけ、別の選択肢があればそっちを試す
+                if (res.slice(-2) === nextChar + nextChar && nexts.length > 1) {
+                    nextChar = nexts.filter(c => c !== nextChar)[0] || nextChar;
+                }
+                curr = nextChar;
+            }
+            return res;
+        }
+
+        // --- データ管理 ---
+        function saveData() {
+            localStorage.setItem('ai_data_v7', JSON.stringify(data));
+        }
+
+        function saveSettings() {
+            data.userName = document.getElementById('user-name').value;
+            data.aiName = document.getElementById('edit-ai-name').value;
+            data.backgroundImage = document.getElementById('edit-bg-url').value;
+
+            const uFile = document.getElementById('user-icon-file').files[0];
+            const aFile = document.getElementById('edit-ai-file').files[0];
+
+            let p = [];
+            if (uFile) p.push(toBase64(uFile).then(r => data.userImage = r));
+            if (aFile) p.push(toBase64(aFile).then(r => data.aiImage = r));
+
+            Promise.all(p).then(() => {
+                saveData();
+                updateUI();
+                alert("保存しました");
+            });
+        }
+
+        function resetMemory() {
+            if (confirm("【警告】\nAIが覚えた言葉をすべて消去します。\n元に戻せませんが、本当によろしいですか？")) {
+                data.brain = {};
+                saveData();
+                alert("記憶が初期化されました。また1から教えてあげてください。");
+            }
+        }
+
+        // --- ユーティリティ ---
+        function addBubble(name, text, img, isRight) {
+            const div = document.getElementById('messages');
+            const row = document.createElement('div');
+            row.className = `chat-row ${isRight ? 'right' : 'left'}`;
+            row.innerHTML = `
+            ${!isRight ? `<img class="chat-icon" src="${img || 'https://placehold.jp/40.png'}">` : ''}
+            <div class="msg-content">
+                <span class="msg-name">${name}</span>
+                <div class="msg-bubble">${text}</div>
+            </div>
+            ${isRight ? `<img class="chat-icon" src="${img || 'https://placehold.jp/40.png'}">` : ''}
+        `;
+            div.appendChild(row);
+            div.scrollTop = div.scrollHeight;
+        }
+
+        function toBase64(file) {
+            return new Promise(r => {
+                const reader = new FileReader();
+                reader.onload = e => r(e.target.result);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function exportMemory() {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = data.aiName + "_backup.json";
+            a.click();
+        }
+
+        function importMemory() {
+            const f = document.getElementById('memory-import').files[0];
+            if (!f) return;
+            const r = new FileReader();
+            r.onload = e => {
+                data = JSON.parse(e.target.result);
+                saveData();
+                updateUI();
+                alert("インポート完了");
+            };
+            r.readAsText(f);
+        }
+
+        function renderModLoadList() {
+            const div = document.getElementById('mod-load-list');
+            div.innerHTML = "";
+            PUBLIC_MODS.forEach(m => {
+                div.innerHTML += `<div>・${m.name} <button class="btn btn-blue" style="font-size:0.7em; padding:2px 8px;" onclick="loadMod('${m.path}')">ロード</button></div>`;
+            });
+        }
+
+        async function loadMod(path) {
+            if (!confirm("現在のAI設定を上書きしますか？")) return;
+            const res = await fetch(path);
+            const json = await res.json();
+            data.aiName = json.aiName;
+            data.aiImage = json.aiImage;
+            data.brain = json.brain;
+            data.backgroundImage = json.backgroundImage;
+            saveData();
+            updateUI();
+            alert("ロード完了");
+        }
+    </script>
 </body>
 
 </html>
->>>>>>> 98b55bb8a58d9ee250b98df2c69bfb996c92d16f
