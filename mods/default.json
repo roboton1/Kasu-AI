@@ -1,0 +1,9 @@
+{
+  "modName": "標準AI",
+  "aiName": "AI",
+  "aiImage": "https://www.littletoncoin.com/shop/api/assets/LCCCatalogAssetStore/images/catalog/products/300x300/A6033_A.png",
+  "backgroundImage": "",
+  "brain": {
+  },
+  "customCSS": "body { font-family: 'MS PGothic'; } .ai-msg { border: 2px solid pink; }"
+}
