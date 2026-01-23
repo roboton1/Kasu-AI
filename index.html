@@ -278,6 +278,7 @@
             <span id="header-title">AI Chat Room</span>
             <div id="conf-header-controls" style="display:none;">
                 <small style="color:#aaa; margin-right:10px;">学習中...</small>
+
                 <button id="conf-toggle-btn" class="btn btn-green" style="font-size:0.8em; padding:4px 10px;"
                     onclick="toggleConference()">開始 ▶</button>
             </div>
@@ -311,18 +312,39 @@
             <input type="text" id="user-input" placeholder="メッセージを入力...">
             <button class="btn btn-blue" onclick="sendMessage()">送信</button>
         </div>
+        <center>
+            <div id="voteArea" style="margin-top:10px;"></div>
+        </center>
+        <div id="chairmanPanel" style="display:none; border:2px solid #888; padding:10px; margin-top:10px;">
+            <b>👑 議長パネル</b><br>
+            <button onclick="chairmanKick()">追放</button>
+            <button onclick="chairmanRecommend()">推薦</button>
+            <button onclick="chairmanResign()">辞任</button>
+        </div>
+
+
     </div>
 
     <div id="settings-panel" class="panel">
         <strong>⚙️ 基本設定</strong>
         <hr>
-        あなたの名前: <input type="text" id="user-name" placeholder="あなた"><br>
+        あなたの名前: <input type="text" id="username" placeholder="あなた"><br>
         あなたのアイコン: <input type="file" id="user-icon-file" accept="image/*"><br>
         <hr>
         AIの名前: <input type="text" id="edit-ai-name">
         AIアイコン: <input type="file" id="edit-ai-file" accept="image/*">
         背景URL: <input type="text" id="edit-bg-url">
         <button class="btn btn-blue" onclick="saveSettings()" style="width:100%; margin-top:10px;">設定保存</button>
+
+        <hr>
+        <strong>🏛 議長システム</strong><br>
+        <label><input type="checkbox" id="chk-chairman" checked> 議長モード有効</label><br>
+        タイトル: <input type="text" id="chairman-title" value="議長"><br>
+        <select id="electionMode">
+            <option value="manual">プレイヤー指定</option>
+            <option value="vote">選挙で決定</option>
+        </select>
+
 
         <hr>
         <strong>🚨 危険なボタン</strong><br>
@@ -348,6 +370,7 @@
             backgroundImage: "",
             brain: {}
         }));
+
 
         // window直下に配置してどこからでも呼べるようにする
         window.loadSpecificBrain = function (input) {
@@ -407,10 +430,39 @@
             addMyAIClone();
         }
 
+        let chairmanMode = true;        // 議長モードON/OFF
+        let chairman = null;
+        let viceChairman = null;
+        let successor = null;
+        let chairmanTitle = "議長";
+
+        let chairmanTimer = null;
+        let termCount = 1;
+        let expelled = new Set();
+        let playerAlive = true;
+        let electionMode = "vote";   // manual / vote
+        let settings = {
+            chairmanMode: true
+        };
+        let in_vote = true;
+
+
+        function toggleChairmanMode() {
+            settings.chairmanMode = !settings.chairmanMode;
+            addBubble("システム",
+                "⚙ 議長モード: " + (settings.chairmanMode ? "ON" : "OFF"),
+                "",
+                false
+            );
+        }
+
+
+
+
 
 
         function updateUI() {
-            document.getElementById('user-name').value = data.userName;
+            document.getElementById('username').value = data.userName;
             document.getElementById('edit-ai-name').value = data.aiName;
             document.getElementById('edit-bg-url').value = data.backgroundImage || "";
             document.body.style.backgroundImage = data.backgroundImage ? `url(${data.backgroundImage})` : "none";
@@ -480,6 +532,264 @@
             `;
             });
         }
+
+
+        async function startElection() {
+            is_vote = true;
+            if (!settings.chairmanMode) {
+                is_vote = false;
+                addBubble("システム", "⚙ 議長モードがOFFのため選挙は行われません。", "", false);
+                return;
+            }
+
+            const votes = {};
+            activeMembers.forEach(v => votes[v.name] = 0);
+
+            addBubble("システム", "🗳 議長選挙を開始します。", "", false);
+
+            // 🗣 AI投票フェーズ
+            for (let voter of activeMembers) {
+                await sleep(600);
+
+                let target = decideVote(voter);
+                votes[target.name]++;
+
+                addBubble(voter.name,
+                    `私は ${target.name} に投票します。`,
+                    voter.avatar || "",
+                    false
+                );
+            }
+
+            // 👤 プレイヤー投票
+            await sleep(500);
+            addBubble("システム", "👤 あなたの投票を選んでください。", "", false);
+
+            showVoteButtons(activeMembers, (picked) => {
+                votes[picked.name]++;
+
+                finishElection(votes);
+            });
+        }
+
+        function decideVote(voter) {
+            let recommendedMember = null;
+
+            if (recommendedMember && Math.random() < 0.4) {
+                return recommendedMember;
+            }
+
+            let pool = activeMembers.filter(m => m !== voter);
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+
+        function showVoteButtons(list, callback) {
+            const area = document.getElementById("voteArea");
+            area.innerHTML = "";
+
+            list.forEach(m => {
+                let btn = document.createElement("button");
+                btn.textContent = m.name;
+                btn.onclick = () => {
+                    area.innerHTML = "";
+                    callback(m);
+                };
+                area.appendChild(btn);
+            });
+        }
+
+        function maybeRunAgain() {
+            if (!chairman) return false;
+            if (termCount >= 4) return false;
+
+            const prob = termCount === 1 ? 0.7 : 0.35;
+
+            if (Math.random() < prob) {
+                termCount++;
+
+                addBubble("システム",
+                    `🗳 ${chairman.name} は ${termCount}期目に挑戦すると発表した。`,
+                    "",
+                    false
+                );
+
+                startElection();
+                return true;
+            }
+            return false;
+        }
+
+        function endChairmanTerm() {
+            addBubble("システム",
+                `⏳ ${chairman.name} の任期が終了した。`,
+                "",
+                false
+            );
+
+            if (maybeRunAgain()) return;
+
+            startElection();
+        }
+
+        function startChairmanTerm() {
+            clearTimeout(chairmanTimer);
+
+            addBubble("システム",
+                `🏛 ${chairman.name} の任期が開始された。（5分）`,
+                "",
+                false
+            );
+
+            chairmanTimer = setTimeout(() => {
+                endChairmanTerm();
+            }, 5 * 60 * 1000);
+        }
+
+
+        function finishElection(votes, round = 1) {
+            let totalVotes = 0;
+            for (let n in votes) totalVotes += votes[n];
+
+            let sorted = Object.entries(votes)
+                .sort((a, b) => b[1] - a[1]);
+
+            let winner = sorted[0][0];
+            let max = sorted[0][1];
+
+            let report = `📊 第${round}回 投票結果:\n`;
+            sorted.forEach(v => {
+                report += `<br />${v[0]} : ${v[1]} 票\n`;
+            });
+
+            // ✅ 過半数チェック
+            if (max > totalVotes / 2) {
+                chairman = activeMembers.find(m => m.name === winner);
+
+                addBubble("システム",
+                    report + `\n<br />🏆 過半数獲得。\n${chairmanTitle}は ${winner} に決定しました。`,
+                    "",
+                    false
+                );
+
+                if (winner === data.userName) openChairmanPanel();
+                appointVice();
+                startChairmanTerm();
+
+
+                return;
+
+            }
+
+            // ❌ 過半数なし → 決選
+            let finalists = sorted.slice(0, 2).map(v => v[0]);
+            is_vote = true
+
+            addBubble("システム",
+                report + `\n<br />⚔ 過半数なし。決選投票に進みます。\n<br />候補: ${finalists.join(" / ")}`,
+                "",
+                false
+            );
+
+            runoffElection(finalists, round + 1);
+        }
+
+        async function runoffElection(finalists, round) {
+            const votes = {};
+            finalists.forEach(n => votes[n] = 0);
+
+            // 🤖 AI投票
+            for (let voter of activeMembers) {
+                if (voter.name === data.userName) continue;
+
+                await sleep(500);
+
+                let pickName = finalists[Math.floor(Math.random() * finalists.length)];
+                votes[pickName]++;
+
+                addBubble(voter.name,
+                    `私は ${pickName} に投票します。`,
+                    voter.avatar || "",
+                    false
+                );
+            }
+
+            // 👤 プレイヤー
+            await sleep(300);
+            addBubble("システム", "👤 決選投票です。選んでください。", "", false);
+
+            showVoteButtons(
+                activeMembers.filter(m => finalists.includes(m.name)),
+                (picked) => {
+                    votes[picked.name]++;
+                    is_vote = false;
+                    finishElection(votes, round);
+                }
+            );
+        }
+
+
+
+        function sleep(ms) {
+            return new Promise(r => setTimeout(r, ms));
+        }
+
+        function openChairmanPanel() {
+            document.getElementById("chairmanPanel").style.display = "block";
+        }
+
+        function closeChairmanPanel() {
+            document.getElementById("chairmanPanel").style.display = "none";
+        }
+
+        function chairmanKick() {
+            let target = pickRandomMember();
+
+            if (!target) return;
+
+            activeMembers = activeMembers.filter(m => m !== target);
+
+            addBubble("システム",
+                `⚖ ${chairmanTitle}は ${target.name} を追放しました。`,
+                "",
+                false
+            );
+        }
+
+        function chairmanRecommend() {
+            let target = pickRandomMember();
+
+            addBubble("システム",
+                `⭐ ${chairmanTitle}は ${target.name} を推薦しました。`,
+                "",
+                false
+            );
+
+            recommendedMember = target;
+        }
+
+
+
+        function chairmanResign() {
+            addBubble("システム",
+                `🏳 ${chairmanTitle}は辞任しました。`,
+                "",
+                false
+            );
+
+            recommendedMember = null;
+            closeChairmanPanel();
+            startElection();
+        }
+
+
+        function pickRandomMember() {
+            let pool = activeMembers.filter(m => m.name !== chairman.name);
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+
+
 
         // --- モード切替 ---
         function switchMode(newMode, el) {
@@ -557,6 +867,15 @@
             document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
 
             addBubble("システム", "会議開始。AIたちは互いに学習し、関係を築きます。", "", false);
+            if (chairmanMode) {
+                if (electionMode === "vote") {
+                    startElection();
+                } else {
+                    chairman = activeMembers[Math.floor(Math.random() * activeMembers.length)];
+                    addBubble("システム", `${chairmanTitle}は ${chairman.name} に決定しました。`, "", false);
+                }
+            }
+
             runConferenceLoop("");
         }
 
@@ -571,10 +890,16 @@
             }
         }
         function runConferenceLoop(lastTopic) {
+            if (activeMembers.length === 0) {
+                addBubble("システム", "⚠ 誰もいません。会議を終了します。", "", false);
+                return;
+            }
+
             if (!conferenceRunning) return;
 
             const ais = activeMembers.filter(m => m.type === 'ai');
             const speaker = ais[Math.floor(Math.random() * ais.length)];
+
 
             conferenceTimer = setTimeout(() => {
                 if (!conferenceRunning) return;
@@ -590,26 +915,201 @@
                 addBubble(speaker.name, body, speaker.image, false);
 
                 runConferenceLoop(body);
+                if (chairman && speaker.name === chairman.name) {
+                    maybeChairmanAction();
+                }
+
             }, 2000);
+
+        }
+        // AI議長 //
+        function maybeChairmanAction() {
+            if (!chairman) return;
+            if (Math.random() > 60.25) return;
+
+            let r = Math.random();
+
+            if (r < 0.3) chairmanExpel();
+            else if (r < 0.45) chairmanRecommend();
+            else if (r < 0.6) chairmanInvite();
+            else if (r < 0.75) chairmanRelease();
+            else chairmanPurge();
+        }
+
+        function appointVice() {
+            let pool = activeMembers.filter(m =>
+                m.name !== chairman.name &&
+                (!successor || m.name !== successor.name)
+            );
+
+            if (!pool.length) return;
+
+            viceChairman = pool[Math.floor(Math.random() * pool.length)];
+
+            addBubble("システム",
+                `🧑‍✈️ ${chairmanTitle} ${chairman.name} は ${viceChairman.name} を副${chairmanTitle}に任命した。`,
+                "",
+                false
+            );
         }
 
 
-        // --- AIコア ---
-        function learn(brain, text) {
-            if (!text || text.length < 2) return;
-            for (let i = 0; i < text.length - 1; i++) {
-                let c = text[i], n = text[i + 1];
-                if (!brain[c]) brain[c] = [];
+        function chairmanExpel() {
+            let pool = activeMembers.filter(m => canExpel(m));
 
-                // 同じ繋がりを覚えすぎないように上限(10000)を設ける
-                // これにより、特定の言葉に執着しすぎるのを防ぎ、ランダム性を維持します
-                if (brain[c].length < 10000) {
-                    brain[c].push(n);
-                }
+            if (!pool.length) return;
+
+            let t = pool[Math.floor(Math.random() * pool.length)];
+
+            expelled.add(t.name);
+            activeMembers = activeMembers.filter(m => m.name !== t.name);
+
+            if (t.type === "user") playerAlive = false;
+
+            addBubble("システム",
+                `☠ ${chairmanTitle} ${chairman.name} は ${t.name} を追放した。`,
+                "",
+                false
+            );
+        }
+
+        let recommendedMember = null;
+
+        function chairmanRecommend() {
+            let pool = activeMembers.filter(m =>
+                m.name !== chairman.name &&
+                (!viceChairman || m.name !== viceChairman.name)
+            );
+
+            if (!pool.length) return;
+
+            successor = pool[Math.floor(Math.random() * pool.length)];
+
+            addBubble("システム",
+                `⭐ ${chairmanTitle} ${chairman.name} は ${successor.name} を後継者に指名した。`,
+                "",
+                false
+            );
+        }
+
+        function chairmanPurge() {
+            let victims = activeMembers.filter(m => m.name !== chairman.name);
+            if (victims.length < 2) return;
+
+            let killCount = Math.max(1, Math.floor(victims.length * 0.4));
+
+            addBubble("システム", `🔥 ${chairmanTitle} ${chairman.name} による大粛清が始まった。`, "", false);
+
+            for (let i = 0; i < killCount; i++) {
+                let v = victims.splice(Math.floor(Math.random() * victims.length), 1)[0];
+
+                expelled.add(v.name);
+                activeMembers = activeMembers.filter(m => m.name !== v.name);
+
+                if (v.type === "user") playerAlive = false;
+
+                addBubble("システム", `☠ ${v.name} は粛清された。`, "", false);
             }
         }
+        function canExpel(target) {
+            if (!target) return false;
+            if (chairman && target.name === chairman.name) return false;
+            if (viceChairman && target.name === viceChairman.name) return false;
+            if (successor && target.name === successor.name) return false;
+            return true;
+        }
+
+        // 名前生成 //
+        function generateName(brain, input = "") {
+            let keys = Object.keys(brain || {});
+            let globalKeys = Object.keys(data.brain || {});
+            let source = keys.length ? keys : globalKeys;
+
+            if (!source.length) return "名無し";
+
+            let startChar = "";
+
+            if (input && input.length > 0) {
+                const valid = input.split('').filter(c => source.includes(c));
+                if (valid.length) {
+                    startChar = valid[Math.floor(Math.random() * valid.length)];
+                }
+            }
+
+            if (!startChar) {
+                startChar = source[Math.floor(Math.random() * source.length)];
+            }
+
+            let len = Math.floor(Math.random() * 3) + 2;
+            let name = startChar;
+
+            for (let i = 1; i < len; i++) {
+                name += source[Math.floor(Math.random() * source.length)];
+            }
+
+            return name;
+        }
+
+
+
+        function chairmanInvite() {
+            let globalKeys = Object.keys(data.brain);
+
+            let pool = globalKeys.filter(k =>
+                !activeMembers.some(m => m.name === k) &&
+                !expelled.has(k)
+            );
+
+            if (!pool.length) return;
+
+            let name = generateName(data.brain);
+            let avatar = `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(name)}`;
+
+            let newMember = {
+                type: "ai",
+                name,
+                image: avatar,
+                brain: JSON.parse(JSON.stringify(data.brain)),
+                fav: "",
+                ng: "",
+                isIndividual: true
+            };
+
+            activeMembers.push(newMember);
+
+            addBubble("システム",
+                `👥 ${chairmanTitle} ${chairman.name} は ${name} を会議に招待した。`,
+                "",
+                false
+            );
+        }
+
+
+        function chairmanRelease() {
+            if (!expelled.size) return;
+
+            let list = Array.from(expelled);
+            let name = list[Math.floor(Math.random() * list.length)];
+
+            expelled.delete(name);
+            if (name.type === "user") playerAlive = true;
+
+
+            addBubble("システム",
+                `🔓 ${chairmanTitle} ${chairman.name} は ${name} を釈放した。`,
+                "",
+                false
+            );
+        }
+
+
+
         // --- メッセージ処理 ---
         function sendMessage() {
+            if (!playerAlive) {
+                alert("あなたは追放されています。発言できません。");
+                return;
+            }
             const input = document.getElementById('user-input');
             const text = input.value.trim();
             if (!text) return;
@@ -635,17 +1135,44 @@
             }
         }
 
+
+
         // --- AIコア ---
-tion generate(brain, input) {
+        function learn(brain, text) {
+            if (!brain) return;
+
+            for (let i = 0; i < text.length - 1; i++) {
+                let c = text[i];
+                let n = text[i + 1];
+
+                if (!Array.isArray(brain[c])) {
+                    brain[c] = [];
+                }
+
+                brain[c].push(n);
+            }
+        }
+
+
+
+        // --- AIコア --- //
+        function generate(brain, input) {
+
+            // ✅ 防御
+            if (!brain || typeof brain !== "object") {
+                brain = {};
+            }
+            if (!data || !data.brain || typeof data.brain !== "object") {
+                data.brain = {};
+            }
+
             let keys = Object.keys(brain);
-            // 全体の共有記憶（data.brain）からも文字を探すための準備
             let globalKeys = Object.keys(data.brain);
 
-            // もし自分の脳（brain）が空なら、共有記憶から一文字借りる。それもなければ沈黙
             if (keys.length === 0) {
                 if (globalKeys.length > 0) {
                     let giftChar = globalKeys[Math.floor(Math.random() * globalKeys.length)];
-                    return giftChar + "...？"; // 一文字だけ喋って様子見
+                    return giftChar + "...？";
                 }
                 return "......";
             }
@@ -654,38 +1181,35 @@ tion generate(brain, input) {
             const forceNewTopic = Math.random() < 0.3;
 
             if (input && input.length > 0 && !forceNewTopic) {
-                // 自分の脳が知っている文字を優先
                 const validChars = input.split('').filter(c => brain[c]);
                 if (validChars.length > 0) {
                     startChar = validChars[Math.floor(Math.random() * validChars.length)];
                 }
             }
 
-            // ★ここが重要：開始文字が自分の脳にない場合、
-            // 入力文字のどれか、または共有記憶から無理やり「最初の一歩」を決める
             if (!startChar) {
                 startChar = keys[Math.floor(Math.random() * keys.length)];
             }
 
             let curr = startChar;
             let res = "";
-            /* ... 以下のループ処理はそのまま ... */
 
             for (let i = 0; i < 20; i++) {
                 res += curr;
                 let nexts = brain[curr];
-                if (!nexts) break;
+                if (!Array.isArray(nexts)) break;
 
                 let nextChar = nexts[Math.floor(Math.random() * nexts.length)];
 
-                // 「あああ」など連続しすぎを防ぐ
                 if (res.slice(-2) === nextChar + nextChar && nexts.length > 1) {
                     nextChar = nexts.filter(c => c !== nextChar)[0] || nextChar;
                 }
                 curr = nextChar;
             }
+
             return res;
         }
+
 
         // --- データ管理 ---
         function saveData() {
@@ -703,6 +1227,11 @@ tion generate(brain, input) {
             let p = [];
             if (uFile) p.push(toBase64(uFile).then(r => data.userImage = r));
             if (aFile) p.push(toBase64(aFile).then(r => data.aiImage = r));
+
+            chairmanMode = document.getElementById("chk-chairman").checked;
+            chairmanTitle = document.getElementById("chairman-title").value || "議長";
+            electionMode = document.getElementById("chairman-election").value;
+
 
             Promise.all(p).then(() => {
                 saveData();
