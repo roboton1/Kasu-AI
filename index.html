@@ -390,18 +390,41 @@
         // --- マイAIクローン管理 ---
         function addMyAIClone() {
             const list = document.getElementById('my-ai-clones-list');
-            const currentCount = list.children.length;
-            if (currentCount >= 56) { alert("上限です！"); return; }
-
-            myAICloneCount++;
             const div = document.createElement('div');
             div.className = 'clone-item';
+            div.aiSpecificBrain = {}; // 個別用
+
             div.innerHTML = `
-            <img src="${data.aiImage}" style="width:30px; height:30px; border-radius:50%; margin-right:5px;">
-            <input type="text" value="${data.aiName} ${myAICloneCount > 1 ? myAICloneCount : ''}" class="clone-name-input">
-            <button class="btn btn-red" style="padding:2px 8px; font-size:0.8em;" onclick="this.parentElement.remove()">×</button>
-        `;
+        <input type="file" class="clone-icon-file" style="display:none;" onchange="updateCloneIcon(this)">
+        <img src="${data.aiImage}" class="clone-icon-preview" style="width:36px; height:36px; border-radius:50%; cursor:pointer; object-fit:cover; border:1px solid #ccc;" onclick="this.previousElementSibling.click()">
+        <input type="text" value="${data.aiName}${list.children.length + 1}" class="clone-name-input" style="width:70px;">
+        <select class="clone-brain-type" onchange="toggleBrainFileBtn(this)">
+            <option value="share">共有記憶</option>
+            <option value="empty">記憶：空から</option>
+            <option value="individual">個別：ファイル</option>
+        </select>
+        <button class="btn btn-blue brain-load-btn" style="display:none; font-size:0.7em; padding:2px 5px;" onclick="this.nextElementSibling.click()">記憶UP</button>
+        <input type="file" class="clone-brain-file" style="display:none;" onchange="loadSpecificBrain(this)">
+        <button class="btn btn-red" onclick="this.parentElement.remove()">×</button>
+    `;
             list.appendChild(div);
+        }
+
+        // プレビュー表示を復活させる関数
+        function updateCloneIcon(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    input.nextElementSibling.src = e.target.result;
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        // セレクトボックスによってボタンを表示/非表示
+        function toggleBrainFileBtn(select) {
+            const btn = select.parentElement.querySelector('.brain-load-btn');
+            btn.style.display = (select.value === 'individual') ? 'inline-block' : 'none';
         }
 
         function renderModSelect() {
@@ -457,8 +480,32 @@
             if (document.getElementById('chk-user').checked) {
                 activeMembers.push({ type: 'user', name: data.userName, image: data.userImage });
             }
-            document.querySelectorAll('.clone-name-input').forEach(input => {
-                activeMembers.push({ type: 'ai', name: input.value, image: data.aiImage });
+            document.querySelectorAll('.clone-item').forEach(item => {
+                const name = item.querySelector('.clone-name-input').value;
+                const img = item.querySelector('.clone-icon-preview').src;
+                const brainType = item.querySelector('.clone-brain-type').value;
+
+                let targetBrain;
+                let learningMode = false;
+
+                if (brainType === 'individual') {
+                    targetBrain = item.aiSpecificBrain; // ファイル読み込み済み
+                } else if (brainType === 'empty') {
+                    targetBrain = {}; // まっさらな状態からスタート
+                    learningMode = true; // 会議中に学習させる
+                } else {
+                    targetBrain = data.brain; // いつもの共有
+                    learningMode = true;
+                }
+
+                activeMembers.push({
+                    type: 'ai',
+                    name: name,
+                    image: img,
+                    brain: targetBrain,
+                    isLearning: learningMode,
+                    isIndividual: (brainType === 'empty' || brainType === 'individual')
+                });
             });
 
             if (activeMembers.length < 2) return alert("2人以上必要です");
@@ -485,55 +532,29 @@
         }
         function runConferenceLoop(lastTopic) {
             if (!conferenceRunning) return;
-
-            // 1. 話者を選ぶ
             const ais = activeMembers.filter(m => m.type === 'ai');
-            if (ais.length === 0) return;
             const speaker = ais[Math.floor(Math.random() * ais.length)];
-
-            // 2. 直前の話者との関係をチェック
-            const lastSpeakerRow = document.querySelector('.chat-row:last-child .msg-name');
-            const lastSpeakerName = lastSpeakerRow ? lastSpeakerRow.innerText.split('<')[0].trim() : "";
-            let relKey = [speaker.name, lastSpeakerName].sort().join('-');
-
-            // ★重要：ここで「とりあえず空っぽ」で定義しておく
-            let prefix = "";
-            let tag = "";
-
-            // 3. 関係性がある場合のみ上書きする
-            if (lastSpeakerName && speaker.name !== lastSpeakerName) {
-                if (!relations[relKey]) relations[relKey] = 0;
-
-                // 確率で関係が変化
-                const rnd = Math.random();
-                if (rnd > 0.92) relations[relKey] -= 10; // 喧嘩
-                else if (rnd < 0.08) relations[relKey] += 10; // 同盟
-
-                // 関係性に応じたセリフとタグをセット
-                if (relations[relKey] <= -20) {
-                    prefix = MOOD_PHRASES.fight[Math.floor(Math.random() * MOOD_PHRASES.fight.length)];
-                    tag = '<span class="relation-tag tag-enemy">喧嘩</span>';
-                } else if (relations[relKey] >= 20) {
-                    prefix = MOOD_PHRASES.friend[Math.floor(Math.random() * MOOD_PHRASES.friend.length)];
-                    tag = '<span class="relation-tag tag-friend">同盟</span>';
-                }
-            }
 
             conferenceTimer = setTimeout(() => {
                 if (!conferenceRunning) return;
 
-                // 4. 生成と学習（オウム返し防止込み）
-                const body = generate(data.brain, lastTopic);
-                const fullMsg = prefix + body; // ここでエラーが出なくなります
+                // 生成
+                const body = generate(speaker.brain, lastTopic);
 
-                learn(data.brain, fullMsg);
-                saveData();
+                // 学習
+                if (speaker.isLearning) {
+                    // 自分の脳（共有 or 個別空）に学習
+                    learn(speaker.brain, body);
+                    // 共有記憶モードなら、全体データにも保存
+                    if (!speaker.isIndividual) {
+                        learn(data.brain, body);
+                        saveData();
+                    }
+                }
 
-                addBubble(speaker.name + tag, fullMsg, speaker.image, false);
-
-                // 5. 次のループへ
-                runConferenceLoop(fullMsg);
-            }, 1500 + Math.random() * 2500);
+                addBubble(speaker.name, body, speaker.image, false);
+                runConferenceLoop(body);
+            }, 2000);
         }
 
         // --- AIコア ---
@@ -588,31 +609,33 @@
         }
         function generate(brain, input) {
             let keys = Object.keys(brain);
+            // 記憶が空っぽなら「......」を返す
             if (keys.length === 0) return "......";
 
-            // 【旧制度の復活】入力された文字から開始、なければランダム
-            // 入力された文字の「0番目（最初）」から開始しようとするため、変な文字を引き継ぐ
-            // 入力（前の発言）の中からランダムに一文字選んで開始する（話題のリセット＆引き継ぎ）
             let startChar = "";
-            if (input && input.length > 0) {
-                // 前の発言に含まれる文字の中から、脳が知っている文字をランダムに選ぶ
+            // ★判定を最初に持ってくる！ 30%の確率で前の話を無視する
+            const forceNewTopic = Math.random() < 0.3;
+
+            if (input && input.length > 0 && !forceNewTopic) {
+                // 前の発言から「今の脳が知っている文字」だけを抜き出す
                 const validChars = input.split('').filter(c => brain[c]);
                 if (validChars.length > 0) {
                     startChar = validChars[Math.floor(Math.random() * validChars.length)];
                 }
             }
-            // 適切な開始文字がなければ、脳の全データからランダムに選ぶ
+
+            // 開始文字を決定（なければランダム）
             let curr = startChar || keys[Math.floor(Math.random() * keys.length)];
             let res = "";
+
             for (let i = 0; i < 20; i++) {
                 res += curr;
                 let nexts = brain[curr];
                 if (!nexts) break;
 
-                // 素直に学習データから選ぶ（ここが「昔の良さ」）
                 let nextChar = nexts[Math.floor(Math.random() * nexts.length)];
 
-                // 連続しすぎ（あああ...）の時だけ、別の選択肢があればそっちを試す
+                // 「あああ」など連続しすぎを防ぐ
                 if (res.slice(-2) === nextChar + nextChar && nexts.length > 1) {
                     nextChar = nexts.filter(c => c !== nextChar)[0] || nextChar;
                 }
