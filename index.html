@@ -71,6 +71,7 @@
             scroll-behavior: smooth;
         }
 
+
         /* Chat Bubbles */
         .chat-row {
             display: flex;
@@ -268,11 +269,16 @@
             right: 0;
             background: linear-gradient(90deg, #111, #222);
             display: flex;
+            /* 横並びのベース */
+            flex-wrap: wrap;
+            /* はみ出したら改行 */
             gap: 10px;
+            /* アイテム間の間隔 */
             padding: 8px;
             font-size: 13px;
             z-index: 9999;
         }
+
 
         .factionBox {
             background: #1e1e1e;
@@ -313,6 +319,11 @@
 
         <div id="messages"></div>
 
+        <!-- 派閥チャットは独立 -->
+
+
+
+
         <div id="conf-settings">
             <h3>📋 会議メンバー編成</h3>
             <button onclick="saveMeetingMembers()">💾 メンバー保存</button>
@@ -338,6 +349,7 @@
             </div>
         </div>
 
+
         <div class="input-area">
             <input type="text" id="user-input" placeholder="メッセージを入力...">
             <button class="btn btn-blue" onclick="sendMessage()">送信</button>
@@ -351,6 +363,7 @@
             <button onclick="chairmanRecommend()">推薦</button>
             <button onclick="chairmanResign()">辞任</button>
         </div>
+
 
 
     </div>
@@ -369,8 +382,8 @@
         <hr>
         <strong>🏛 議長システム</strong><br>
         <label><input type="checkbox" id="chk-chairman" checked> 議長モード有効</label><br>
-        タイトル: <input type="text" id="chairmanTitle" value="議長"><br>
-        <select id="electionMode">
+        タイトル: <input type="text" id="chairman-title" value="議長"><br>
+        <select id="election-mode">
             <option value="manual">プレイヤー指定</option>
             <option value="vote">選挙で決定</option>
         </select>
@@ -758,11 +771,12 @@
                 await sleep(300);
 
                 if (decideRun(m)) {
-                    candidates.push(m);
-                    addBubble(m.name, `私は${chairmanTitle}に立候補します。`, data.image, "", false);
+                    candidates.push({ ...m }); // コピーして必要なプロパティを保持
+                    addBubble(m.name, `私は${chairmanTitle}に立候補します。`, m.image || "", false);
                 } else {
-                    addBubble(m.name, `私は${chairmanTitle}に立候補しません。`, data.image, "", false);
+                    addBubble(m.name, `私は${chairmanTitle}に立候補しません。`, m.image || "", false);
                 }
+
             }
 
             // プレイヤー
@@ -772,7 +786,7 @@
             await new Promise(resolve => {
                 showRunButtons((run) => {
                     if (run) {
-                        candidates.push(data.userName);
+                        candidates.push({ name: data.userName, isPlayer: true, image: data.userImage }); // ← オブジェクト化
                         addBubble(data.userName, `私は${chairmanTitle}に立候補します。`, data.userImage || "", true);
                     } else {
                         addBubble(data.userName, `私は${chairmanTitle}に立候補しません。`, data.userImage || "", true);
@@ -781,6 +795,7 @@
                 });
             });
 
+
             if (candidates.length === 0) {
                 addBubble("システム", "⚠ 誰も立候補しなかったため、ランダムで選出します。", "", false);
                 candidates.push(activeMembers[Math.floor(Math.random() * activeMembers.length)]);
@@ -788,19 +803,23 @@
 
             // ===== 投票フェーズ =====
             const votes = {};
+            let canana = [];
             candidates.forEach(v => votes[v.name] = 0);
 
             addBubble("システム", "🗳 投票を開始します。", "", false);
 
             for (let voter of activeMembers) {
+                canana.push({ ...voter });
                 await sleep(600);
+
 
                 let target = decideVoteFromList(voter, candidates);
                 votes[target.name]++;
+                let img = voter.aiImage || voter.image || "";
 
                 addBubble(voter.name,
                     `私は ${target.name} に投票します。`,
-                    voter.aiImage,
+                    img,
                     false
                 );
             }
@@ -973,47 +992,67 @@
         async function runoffElection(finalists, round) {
             const votes = {};
             finalists.forEach(n => votes[n] = 0);
+            let candidates = [];
+
 
             // 🤖 AI投票
+            // 👥 NPC投票
             for (let voter of activeMembers) {
-                if (voter.name === data.userName) continue;
+                candidates.push({ ...voter });
+
+                if (voter.name === data.userName) continue; // プレイヤーは後で処理
 
                 await sleep(500);
 
-                let pickName = finalists[Math.floor(Math.random() * finalists.length)];
-                votes[pickName]++;
+                // pickNameを文字列に統一
+                let pick = finalists[Math.floor(Math.random() * finalists.length)];
+                let pickName = typeof pick === "string" ? pick : pick.name;
 
-                addBubble(voter.name,
+                // votes カウント
+                votes[pickName] = (votes[pickName] || 0) + 1;
+
+                // バブル表示用画像
+                let img = voter.aiImage || voter.image || "";
+
+                addBubble(
+                    voter.name,
                     `私は ${pickName} に投票します。`,
-                    data.aiImage || "",
+                    img,
                     false
                 );
             }
 
-            // 👤 プレイヤー
+            // 👤 プレイヤー投票
             await sleep(300);
             addBubble("システム", "👤 決選投票です。選んでください。", "", false);
 
             showVoteButtons(
-                activeMembers.filter(m => finalists.includes(m.name)),
+                activeMembers.filter(m => finalists.includes(m.name)), // 選択肢
                 (picked) => {
-                    votes[picked.name]++;
+                    // 投票カウント
+                    votes[picked.name] = (votes[picked.name] || 0) + 1;
+
                     is_vote = false;
-                    addBubble(data.userName,
+
+                    // プレイヤー自身のバブル
+                    addBubble(
+                        data.userName,
                         `私は ${picked.name} に投票します。`,
                         data.userImage || "",
-                        false
+                        true
                     );
+
                     finishElection(votes, round);
                 }
             );
+
         }
 
         function generateFactionName() {
-            let keys = Object.keys(data.brain || {});
+            let keys = generateName(data.brain);
             if (!keys.length) keys = ["新生", "改革", "未来", "中央"];
 
-            let base = keys[Math.floor(Math.random() * keys.length)];
+            let base = generateName(data.brain);
             let tails = ["派閥", "派", "連合", "党", "の会"];
 
             return base + tails[Math.floor(Math.random() * tails.length)];
@@ -1031,7 +1070,9 @@
                 name,
                 members: [],
                 leader: founder,
-                alive: true
+                alive: true,
+                banned: new Set() // 除名リスト
+
             };
 
             members.forEach(m => {
@@ -1050,14 +1091,21 @@
             renderFactionBar();
         }
 
-
         function joinFaction(member, faction) {
             if (!faction || !faction.alive) return;
             if (member.faction) return;
 
-            // ユーザー本人かチェック
             const isUser = member.name === data.userName;
 
+            // 除名チェック
+            if (faction.banned.has(member)) {
+                addFactionBubble({ name: "システム", faction },
+                    `⚠ ${member.name} は ${faction.name} から除名されています。`
+                );
+                return; // ← ここで return
+            }
+
+            // 加入処理
             member.faction = faction;
             faction.members.push(member);
 
@@ -1079,7 +1127,10 @@
             renderFactionBar();
         }
 
-        // 例：ユーザー宣言が来たら呼ぶ
+
+
+
+        // 派閥脱退・参加
         function userDeclaresFaction(factionName) {
             const member = activeMembers.find(m => m.name === data.userName);
             const faction = factions.concat(deadFactions).find(f => f.name === factionName && f.alive);
@@ -1093,6 +1144,41 @@
 
             joinFaction(member, faction);
         }
+
+        function expelFromFaction(member, faction) {
+            if (!member.faction || member.faction !== faction) return;
+
+            // 派閥から脱退
+            leaveFaction(member);
+
+            // 除名リストに追加
+            faction.banned.add(member);
+
+            addBubble({ name: "システム", faction }, `⚠ ${member.name} は ${faction.name} から除名されました`);
+        }
+
+
+        function userDeclaresFactionleave(factionName) {
+            // 所属派閥を探す
+            const faction = factions.find(f => f.name === factionName && f.alive);
+            if (!faction) {
+                addBubble("システム", `⚠️ 「${factionName}」から脱退できません。存在しないか、活動していない派閥です。`, "", false);
+                return;
+            }
+
+            // メンバーオブジェクトを派閥メンバーから探す
+            const member = faction.members.find(m => m.name === data.userName);
+            if (!member) {
+                addBubble("システム", `⚠️ あなたは「${factionName}」に所属していません。`, "", false);
+                return;
+            }
+
+            leaveFaction(member); // 実際に脱退
+            addBubble("システム", `✅ あなたは「${factionName}」から脱退しました。`, "", false);
+        }
+
+
+
 
 
 
@@ -1141,14 +1227,34 @@
 
             renderFactionBar();
         }
+        function maybeFactionExpel() {
+            if (!factions.length) return;
+            let faction = factions[Math.floor(Math.random() * factions.length)];
+            if (!faction || faction.members.length <= 1) return;
+
+            let candidates = faction.members.filter(m => m !== faction.leader);
+            if (!candidates.length) return;
+
+            let removeCount = Math.floor(Math.random() * candidates.length) + 1;
+            for (let i = 0; i < removeCount; i++) {
+                if (!candidates.length) break;
+                let idx = Math.floor(Math.random() * candidates.length);
+                let m = candidates.splice(idx, 1)[0];
+
+                expelFromFaction(m, faction);
+            }
+        }
+
 
         function maybeFactionAction() {
-            if (Math.random() > 100.15) return;
+            // NPCのみ対象
+            const npcMembers = activeMembers.filter(m => m.name !== data.userName);
 
             let r = Math.random();
 
+            // 新派閥作成
             if (r < 0.25 && factions.length < 5) {
-                let pool = activeMembers.filter(m => !m.faction);
+                let pool = npcMembers.filter(m => !m.faction);
                 if (pool.length >= 2) {
                     let a = pool[Math.floor(Math.random() * pool.length)];
                     let b = pool[Math.floor(Math.random() * pool.length)];
@@ -1156,24 +1262,35 @@
                 }
             }
 
+            // NPCを既存派閥に加入
             else if (r < 0.5 && factions.length) {
                 let faction = factions[Math.floor(Math.random() * factions.length)];
-                let pool = activeMembers.filter(m => !m.faction);
+                let pool = npcMembers.filter(m => !m.faction && !faction.banned.has(m));
                 if (pool.length) {
                     joinFaction(pool[Math.floor(Math.random() * pool.length)], faction);
                 }
             }
 
+
+            // 派閥合併
             else if (r < 0.7 && factions.length >= 2) {
                 let a = factions[Math.floor(Math.random() * factions.length)];
                 let b = factions[Math.floor(Math.random() * factions.length)];
                 if (a !== b) mergeFactions(a, b);
             }
 
+            // NPCが派閥を抜ける
             else if (r < 0.9) {
-                let pool = activeMembers.filter(m => m.faction);
+                let pool = npcMembers.filter(m => m.faction);
                 if (pool.length) leaveFaction(pool[Math.floor(Math.random() * pool.length)]);
             }
+
+            // --- 除名処分 ---
+            if (Math.random() < 0.1) { // 30% 確率で除名イベント
+                maybeFactionExpel();
+            }
+
+
         }
 
 
@@ -1480,19 +1597,64 @@
 
 
         function chairmanExpel(member) {
-            if (!member || !member.name) return;   // ✅ 防御
+            if (!member || !member.name) return;   // 防御
+
+            // 議長と同じ派閥なら追放不可
+            if (member.faction && member.faction === chairman.faction) {
+                addBubble("システム", `⚠️ ${member.name} は議長と同じ派閥のため追放できません。`, "", false);
+                return;
+            }
+
+            // 派閥から強制脱退
+            if (member.faction) {
+                leaveFaction(member); // 既存関数を使う
+            }
 
             expelled.add(member);
             activeMembers = activeMembers.filter(m => m !== member);
 
-            if (member.type === data.userName) playerAlive = false;
+            if (member.type === "user") playerAlive = false;
 
             addBubble("システム",
                 `🚫 ${chairmanTitle} ${chairman.name} は ${member.name} を追放した。`,
                 "",
                 false
             );
+
+            // 会議中メンバー数更新
+            document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
         }
+
+
+        function chairmanPurge() {
+            // 議長派閥のメンバーは対象外
+            let victims = activeMembers.filter(m => m.name !== chairman.name && (!m.faction || m.faction !== chairman.faction));
+            if (victims.length < 2) return;
+
+            let killCount = Math.max(1, Math.floor(victims.length * 0.4));
+
+            addBubble("システム", `🔥 ${chairmanTitle} ${chairman.name} による大粛清が始まった。`, "", false);
+
+            for (let i = 0; i < killCount; i++) {
+                let v = victims.splice(Math.floor(Math.random() * victims.length), 1)[0];
+
+                // 派閥から強制脱退
+                if (v.faction) {
+                    leaveFaction(v);
+                }
+
+                expelled.add(v);
+                activeMembers = activeMembers.filter(m => m !== v);
+
+                if (v.type === "user") playerAlive = false;
+
+                addBubble("システム", `☠ ${v.name} は粛清された。`, "", false);
+            }
+
+            // 会議中メンバー数更新
+            document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
+        }
+
         function chairmanRecommend() {
             let pool = activeMembers.filter(m =>
                 m.name !== chairman.name &&
@@ -1510,25 +1672,6 @@
             );
         }
 
-        function chairmanPurge() {
-            let victims = activeMembers.filter(m => m.name !== chairman.name);
-            if (victims.length < 2) return;
-
-            let killCount = Math.max(1, Math.floor(victims.length * 0.4));
-
-            addBubble("システム", `🔥 ${chairmanTitle} ${chairman.name} による大粛清が始まった。`, "", false);
-
-            for (let i = 0; i < killCount; i++) {
-                let v = victims.splice(Math.floor(Math.random() * victims.length), 1)[0];
-
-                expelled.add(v.name);
-                activeMembers = activeMembers.filter(m => m.name !== v.name);
-
-                if (v.type === "user") playerAlive = false;
-
-                addBubble("システム", `☠ ${v.name} は粛清された。`, "", false);
-            }
-        }
         function canExpel(target) {
             if (!target) return false;
             if (chairman && target.name === chairman.name) return false;
@@ -1643,10 +1786,16 @@
             learn(data.brain, text);
             saveData();
 
-            const joinMatch = text.match(/(.+)に参加します/); // 「〇〇に参加します」を正規表現で検出
+            const joinMatch = text.match(/(.+)に参加/); // 「〇〇に参加します」を正規表現で検出
             if (joinMatch) {
                 const factionName = joinMatch[1].trim();
                 userDeclaresFaction(factionName); // 自動で派閥に参加
+            }
+
+            const leaveMatch = text.match(/(.+)から脱退/); // 「〇〇から退出します」を正規表現で検出
+            if (leaveMatch) {
+                const factionName = leaveMatch[1].trim();
+                userDeclaresFactionleave(factionName); // 自動で派閥から退出
             }
 
             if (mode === 'chat') {
@@ -1782,7 +1931,7 @@
 
             chairmanMode = document.getElementById("chk-chairman").checked;
             chairmanTitle = document.getElementById("chairman-title").value || "議長";
-            electionMode = document.getElementById("chairman-election").value;
+            electionMode = document.getElementById("election-mode").value;
 
 
             Promise.all(p).then(() => {
@@ -1803,12 +1952,23 @@
         // --- ユーティリティ ---
         function addBubble(name, text, img, isRight) {
             const div = document.getElementById('messages');
+
+            // 下にいるか判定（フッター高さも考慮）
+            const footerHeight = document.getElementById('factionBar')?.offsetHeight || 0;
+            const isAtBottom = div.scrollTop + div.clientHeight + footerHeight >= div.scrollHeight - 2;
+
             const row = document.createElement('div');
             row.className = `chat-row ${isRight ? 'right' : 'left'}`;
 
-            const safeImg = (img !== undefined && img !== null && img !== "")
-                ? img
-                : "https://placehold.jp/40.png";
+            // 画像設定
+            let safeImg;
+            if (img !== undefined && img !== null && img !== "") {
+                safeImg = img;
+            } else if (isRight) {
+                safeImg = data.aiImage && data.aiImage !== "" ? data.aiImage : "https://placehold.jp/40.png";
+            } else {
+                safeImg = "https://placehold.jp/40.png";
+            }
 
             row.innerHTML = `
         ${!isRight ? `<img class="chat-icon" src="${safeImg}">` : ''}
@@ -1820,8 +1980,16 @@
     `;
 
             div.appendChild(row);
-            div.scrollTop = div.scrollHeight;
+
+            // 下にいる場合だけ自動スクロール
+            if (isAtBottom) {
+                div.scrollTop = div.scrollHeight;
+            }
         }
+
+
+
+
 
 
         function toBase64(file) {
