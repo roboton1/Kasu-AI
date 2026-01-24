@@ -361,12 +361,100 @@
             <div id="voteArea" style="margin-top:10px;"></div>
         </center>
         <div id="chairmanPanel" style="display:none; border:2px solid #888; padding:10px; margin-top:10px;">
-            <b>👑 議長パネル</b><br>
-            <button onclick="chairmanKick()">追放</button>
-            <button onclick="chairmanRecommend()">後継者を決める</button>
-            <button onclick="chairmanResign()">辞任</button>
+            <b>👑 指導者・パネル</b><br>
+            <!-- メンバー選択用のリストを表示するコンテナ -->
+            <!-- 議長用操作パネル（初期は非表示） -->
+            <div id="chairman-panel"
+                style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000; background: white; padding: 20px; border: 2px solid #333; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); width: 90%; max-width: 400px;">
+                <h3 id="panel-title" style="margin-top: 0;">対象を選択</h3>
 
+                <div style="margin-bottom: 10px;">
+                    <button onclick="selectAll(true)" style="font-size: 11px;">全選択</button>
+                    <button onclick="selectAll(false)" style="font-size: 11px;">解除</button>
+                </div>
+
+                <div id="panel-checkboxes"
+                    style="max-height: 200px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; border: 1px solid #ddd; padding: 10px; background: #fdfdfd;">
+                    <!-- ここに動的にチェックボックスが入る -->
+                </div>
+
+                <div style="margin-top: 15px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <button onclick="closePanel()" style="background: #ccc;">キャンセル</button>
+                    <button id="panel-confirm-btn" onclick=""
+                        style="background: #ff4444; color: white; font-weight: bold; padding: 5px 15px;">実行</button>
+                </div>
+            </div>
+
+            <!-- メインの操作ボタン -->
+            <button onclick="openKickPanel()">追放メニュー</button>
+            <button onclick="openReleasePanel()">釈放メニュー</button>
+            <button onclick="openRecommendPanel()">後継者を推薦</button>
+            <button onclick="chairmanResign()">辞任</button>
+            <!-- 招待用パネルのローカルファイル対応版 -->
+            <div id="invite-panel"
+                style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1001; background: white; padding: 20px; border: 2px solid #333; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); width: 90%; max-width: 400px;">
+                <h3 style="margin-top: 0;">👥 新しいメンバーを招待</h3>
+
+                <!-- 名前入力 -->
+                <div style="margin-bottom: 15px;">
+                    <label style="font-size: 12px; color: #666;">名前:</label>
+                    <input type="text" id="invite-name-input" style="width: 100%; padding: 8px; box-sizing: border-box;"
+                        placeholder="名前を入力" oninput="updateInvitePreview()">
+                </div>
+
+                <!-- アイコン画像選択（ローカルファイル） -->
+                <div style="margin-bottom: 15px;">
+                    <label style="font-size: 12px; color: #666;">アイコン画像:</label>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-top: 5px;">
+                        <div style="flex: 1;">
+                            <input type="file" id="invite-file-input" accept="image/*" style="display: none;"
+                                onchange="handleFileSelect(event)">
+                            <button onclick="document.getElementById('invite-file-input').click()"
+                                style="width: 100%; padding: 5px; font-size: 12px;">画像を選択...</button>
+                            <button onclick="clearSelectedFile()"
+                                style="width: 100%; margin-top: 5px; font-size: 10px; background: none; border: 1px solid #ccc;">画像をクリア</button>
+                        </div>
+                        <img id="invite-icon-preview" src=""
+                            style="width: 50px; height: 50px; border-radius: 50%; background: #eee; border: 1px solid #ccc; object-fit: cover;">
+                    </div>
+                    <small style="font-size: 10px; color: #888;">※未選択なら自動生成されます</small>
+                </div>
+
+                <div style="margin-bottom: 10px;">
+                    <label style="font-size: 12px; color: #666;">過去のメンバーから復帰:</label>
+                    <select id="invite-select-pool" style="width: 100%; padding: 5px;"
+                        onchange="syncInviteSelection(this.value)">
+                        <option value="">-- 選択してください --</option>
+                    </select>
+                </div>
+
+                <div style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+                    <button onclick="closeInvitePanel()" style="background: #ccc;">キャンセル</button>
+                    <button onclick="executeInvite()"
+                        style="background: #4CAF50; color: white; font-weight: bold; padding: 5px 15px;">招待を送信</button>
+                </div>
+            </div>
+            <button onclick="openInvitePanel()">メンバーを招待</button>
+
+
+
+
+            <!-- ここに高さ制限とスクロールを設定 -->
+            <div id="member-checkboxes" style="
+                    max-height: 120px; 
+                    overflow-y: auto; 
+                    display: grid; 
+                    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); 
+                    gap: 5px; 
+                    padding: 5px; 
+                    background: white; 
+                    border: 1px solid #ddd;
+                ">
+            </div>
         </div>
+
+
+    </div>
 
 
 
@@ -512,6 +600,7 @@
             }
             // 初期状態でマイAIを1体リストに追加
             addMyAIClone();
+            loadSettings();
         }
 
         let chairmanMode = true;        // 議長モードON/OFF
@@ -826,6 +915,7 @@
         async function startElection() {
             if (chairman = data.userName) {
                 closeChairmanPanel();
+                closePanel();
 
             }
             is_vote = true;
@@ -859,13 +949,13 @@
             await sleep(400);
             addBubble("システム", "👤 あなたは立候補しますか？", "", false);
 
-            if (chairman = data.userName) {
+            if (chairman === data.userName) {
 
                 await new Promise(resolve => {
                     showRunButtons((run) => {
                         if (run) {
                             candidates.push({ name: data.userName, isPlayer: true, image: data.userImage }); // ← オブジェクト化
-                            addBubble(data.userName, `私は${chairmanTitle}の${termCount}に挑戦します。`, data.userImage || "", true);
+                            addBubble(data.userName, `私は${chairmanTitle}の${termCount}期目に挑戦します。`, data.userImage || "", true);
                         } else {
                             addBubble(data.userName, `私は次期${chairmanTitle}の選挙に立候補しません。`, data.userImage || "", true);
                         }
@@ -1437,38 +1527,189 @@
             document.getElementById("chairmanPanel").style.display = "none";
         }
 
-        function chairmanKick() {
-            let target = pickRandomMember();
+        // メンバーリストの表示を更新する関数（メンバーが加入・脱退した際に呼ぶ）
+        function updateChecklist() {
+            const container = document.getElementById("member-checkboxes");
+            if (!container) return;
 
-            if (!target) return;
+            const chairmanName = chairman ? chairman.name : null;
 
-            activeMembers = activeMembers.filter(m => m !== target);
-
-            addBubble("システム",
-                `⚖ ${chairmanTitle}は ${target.name} を追放しました。`,
-                "",
-                false
-            );
+            // グリッド表示に適したコンパクトなラベル構造
+            container.innerHTML = activeMembers
+                .filter(m => m && m.name !== chairmanName)
+                .map(m => `
+            <label style="display: flex; align-items: center; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                <input type="checkbox" class="kick-checkbox" value="${m.name}" style="margin-right: 4px;"> 
+                ${m.name}
+            </label>
+        `).join("");
         }
 
-        function chairmanRecommend() {
-            let target = pickRandomMember();
+        // 全選択・解除用の便利関数
+        function selectAll(bool) {
+            const checkboxes = document.querySelectorAll('.kick-checkbox');
+            checkboxes.forEach(cb => cb.checked = bool);
+        }
 
-            if (!target) {
-                console.error("推薦対象が存在しません", target);
-                addBubble("システム", "⚠ 推薦できるメンバーがいません。", "", false);
+
+        let currentMode = ""; // "kick" か "release" を保持
+
+        // パネルを閉じる
+        function closePanel() {
+            document.getElementById("chairman-panel").style.display = "none";
+        }
+
+        // 全選択・解除
+        function selectAll(bool) {
+            const checkboxes = document.querySelectorAll('.target-checkbox');
+            checkboxes.forEach(cb => cb.checked = bool);
+        }
+
+        // 追放パネルを開く
+        function openKickPanel() {
+            currentMode = "kick";
+            document.getElementById("panel-title").innerText = "⚖ 追放対象を選択";
+            document.getElementById("panel-confirm-btn").innerText = "追放実行";
+            document.getElementById("panel-confirm-btn").onclick = executeChairmanAction;
+
+            const list = activeMembers.filter(m => m.name !== chairman?.name);
+            renderCheckboxes(list);
+            document.getElementById("chairman-panel").style.display = "block";
+        }
+
+        // 釈放パネルを開く
+        function openReleasePanel() {
+            currentMode = "release";
+            document.getElementById("panel-title").innerText = "🔓 釈放対象を選択";
+            document.getElementById("panel-confirm-btn").innerText = "釈放実行";
+            document.getElementById("panel-confirm-btn").onclick = executeChairmanAction;
+
+            // expelled (Set or Array) を配列に変換
+            const list = Array.from(expelled || []);
+            if (list.length === 0) {
+                alert("追放されているメンバーはいません。");
+                return;
+            }
+            renderCheckboxes(list);
+            document.getElementById("chairman-panel").style.display = "block";
+        }
+
+        // チェックボックスの描画
+        function renderCheckboxes(members) {
+            const container = document.getElementById("panel-checkboxes");
+            container.innerHTML = members.map(m => `
+        <label style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <input type="checkbox" class="target-checkbox" value="${m.name}"> ${m.name}
+        </label>
+    `).join("");
+        }
+
+        // 実行処理（追放・釈放共通）
+        function executeChairmanAction() {
+            const selectedNames = Array.from(document.querySelectorAll('.target-checkbox:checked')).map(cb => cb.value);
+
+            if (selectedNames.length === 0) {
+                alert("対象を選択してください。");
+                return;
+            }
+            if (currentMode === "kick") {
+                // 追放処理
+                const targets = activeMembers.filter(m => selectedNames.includes(m.name));
+                activeMembers = activeMembers.filter(m => !selectedNames.includes(m.name));
+
+                targets.forEach(m => {
+                    // 追放リストに追加
+                    if (expelled instanceof Set) expelled.add(m);
+                    else expelled.push(m);
+
+                    // プレイヤー生存判定
+                    if (m.type === "user") playerAlive = false;
+
+                    // ★ 派閥からの強制脱退
+                    // メンバー個人(m)が派閥に属しているかチェックして実行
+                    if (m.faction) {
+                        leaveFaction(m);
+                    }
+                });
+
+                const title = typeof chairmanTitle !== 'undefined' ? chairmanTitle : '議長';
+                const msg = selectedNames.length > 1 ? `💀 ${chairmanTitle}による **大粛清**` : `⚖ ${chairmanTitle}は ${selectedNames[0]} を追放`;
+                addBubble("システム", msg, selectedNames.length > 1 ? `対象: ${selectedNames.join(", ")}` : "", false);
+            } else if (currentMode === "release") {
+                // 釈放処理
+                const expelledList = Array.from(expelled);
+                const targets = expelledList.filter(m => selectedNames.includes(m.name));
+
+                targets.forEach(member => {
+                    if (expelled instanceof Set) expelled.delete(member);
+                    else {
+                        const idx = expelled.indexOf(member);
+                        if (idx > -1) expelled.splice(idx, 1);
+                    }
+                    activeMembers.push(member);
+                    if (member.type === "user") playerAlive = true;
+                });
+
+                const msg = selectedNames.length > 1 ? `🕊 ${chairmanTitle}による **大赦（恩赦）**` : `🔓 ${chairmanTitle}は ${selectedNames[0]} を釈放`;
+                addBubble("システム", msg, selectedNames.length > 1 ? `対象: ${selectedNames.join(", ")}` : "", false);
+            }
+
+            closePanel();
+            if (typeof updateChecklist === "function") updateChecklist(); // 他のUIがあれば更新
+        }
+
+
+        // 推薦パネルを開く
+        function openRecommendPanel() {
+            currentMode = "recommend";
+            document.getElementById("panel-title").innerText = "⭐ 後継者を推薦";
+            document.getElementById("panel-confirm-btn").innerText = "推薦する";
+            document.getElementById("panel-confirm-btn").onclick = executeChairmanAction;
+
+            // 自分（議長）以外のメンバーをリストアップ
+            const list = activeMembers.filter(m => m.name !== chairman?.name);
+            if (list.length === 0) {
+                alert("推薦できるメンバーがいません。");
+                return;
+            }
+            renderCheckboxes(list);
+            document.getElementById("chairman-panel").style.display = "block";
+        }
+
+        // executeChairmanAction 関数の中に以下を追記（または差し替え）
+        function executeChairmanAction() {
+            const selectedNames = Array.from(document.querySelectorAll('.target-checkbox:checked')).map(cb => cb.value);
+
+            if (selectedNames.length === 0) {
+                alert("対象を選択してください。");
                 return;
             }
 
-            addBubble(
-                "システム",
-                `⭐ ${chairmanTitle}は ${target.name} を推薦しました。`,
-                "",
-                false
-            );
+            const title = typeof chairmanTitle !== 'undefined' ? chairmanTitle : '議長';
 
-            recommendedMember = target;
+            if (currentMode === "kick") {
+                /* ... 追放の処理 ... */
+            } else if (currentMode === "release") {
+                /* ... 釈放の処理 ... */
+            } else if (currentMode === "recommend") {
+                // 推薦処理
+                // 複数選ばれていても最初の一人を採用
+                const targetName = selectedNames[0];
+                const target = activeMembers.find(m => m.name === targetName);
+
+                if (target) {
+                    recommendedMember = target;
+                    addBubble("システム",
+                        `⭐ ${title}は ${target.name} を次期${chairmanTitle}として推薦しました。`,
+                        "（次回の選挙でこのメンバーに票が集まりやすくなります）",
+                        false
+                    );
+                }
+            }
+
+            closePanel();
         }
+
 
 
 
@@ -1528,38 +1769,36 @@
         // --- 会議システム ---
         // --- 会議システム ---
 
-
         function toggleConference() {
-            if (conferenceRunning) { stopConference(); return; }
+            // 1. すでに動いている場合は停止処理
+            if (conferenceRunning) {
+                stopConference();
+                return;
+            }
+
+            // --- リセット処理 ---
+            clearTimeout(chairmanTimer); // 任期タイマーを破棄
+            is_vote = false;            // 投票フラグを折る
+            expelled = [];              // 追放リストをリセット（新セッションのため）
+            playerAlive = true;         // プレイヤー生存フラグを戻す
+            closePanel();               // 追放/釈放パネルが開いていたら閉じる
+            // ------------------
 
             activeMembers = [];
             if (document.getElementById('chk-user').checked) {
                 activeMembers.push({ type: 'user', name: data.userName, image: data.userImage });
             }
+
             document.querySelectorAll('.clone-item').forEach(item => {
                 const brainType = item.querySelector('.clone-brain-type').value;
-
-                // 脳の参照先を決定
-                let targetBrain;
-                if (brainType === 'individual') {
-                    targetBrain = item.aiSpecificBrain || {}; // ロードしてなければ空
-                } else if (brainType === 'empty') {
-                    targetBrain = {}; // 新規の空の脳
-                } else {
-                    targetBrain = data.brain; // 共有
-                }
+                let targetBrain = (brainType === 'individual') ? (item.aiSpecificBrain || {}) :
+                    (brainType === 'empty') ? {} : data.brain;
 
                 const imgEl = item.querySelector('.clone-icon-preview');
-
                 let image = imgEl?.src;
-
-                // index.html や空なら差し替え
                 if (!image || image.includes("index.html")) {
                     image = item.aiSpecificBrain?.aiImage || data.aiImage;
                 }
-
-                console.log("IMAGE:", image);
-
 
                 activeMembers.push({
                     type: 'ai',
@@ -1568,7 +1807,6 @@
                     brain: targetBrain,
                     isIndividual: (brainType !== 'share')
                 });
-
             });
 
             if (activeMembers.length < 2) return alert("2人以上必要です");
@@ -1580,17 +1818,22 @@
             document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
 
             addBubble("システム", "会議開始。AIたちは互いに学習し、関係を築きます。", "", false);
+
             if (chairmanMode) {
                 if (electionMode === "vote") {
                     startElection();
                 } else {
-                    chairman = activeMembers[Math.floor(Math.random() * activeMembers.length)];
-                    addBubble("システム", `${chairmanTitle}は ${chairman.name} に決定しました。`, "", false);
+                    openChairmanPanel();
                 }
+            }
+            if (!chairmanMode) {
+                openChairmanPanel();
+
             }
 
             runConferenceLoop("");
         }
+
 
         function stopConference() {
             conferenceRunning = false;
@@ -1603,10 +1846,6 @@
             }
         }
         function runConferenceLoop(lastTopic) {
-            if (activeMembers.length === 0) {
-                addBubble("システム", "⚠ 誰もいません。会議を終了します。", "", false);
-                return;
-            }
 
             if (!conferenceRunning) return;
 
@@ -1643,54 +1882,50 @@
                     maybeFactionAction();
                 }
 
-
-                runConferenceLoop(body);
                 if (chairman && speaker.name === chairman.name) {
                     maybeChairmanAction();
                 }
+
+                runConferenceLoop(body);
 
             }, 2000);
 
         }
         // AI議長 //
         function maybeChairmanAction() {
-            if (!chairman) return;
-
-            // 💡 修正: Math.random() は 0.0〜1.0 なので、発生率を調整（例: 25%の確率で発動）
-            if (Math.random() > 0.25) return;
+            if (!chairman || Math.random() > 500.4) return; // 発動率を40%にアップ
 
             let r = Math.random();
             let pool = activeMembers.filter(m => m !== chairman);
 
-            // 何もできない状態なら終了
-            if (!pool.length && expelled.size === 0) return;
+            // --- アクション判定（招待の確率を35%に設定） ---
 
-            if (r < 0.25 && pool.length) {
-                // 1. 追放 (25%)
-                let target = pool[Math.floor(Math.random() * pool.length)];
-                chairmanExpel(target);
-
-            } else if (r < 0.40) {
-                // 2. 推薦 (15%)
-                chairmanRecommend();
-
-            } else if (r < 0.50) {
-                // 3. 招待 (10%)
+            if (r < 0.35) {
+                // 1. 招待 (35%)：もっとも起きやすい
                 chairmanInvite();
 
-            } else if (r < 0.65 && expelled.size) {
-                // 4. 個別釈放 (15%)
-                chairmanRelease();
+            } else if (r < 0.50) {
+                // 2. 追放 (15%)：生存者がいれば実行
+                if (pool.length) chairmanExpel(pool[Math.floor(Math.random() * pool.length)]);
 
-            } else if (r < 0.80 && expelled.size >= 3) {
-                // 5. 【新規】集団釈放 (15%) ※追放者が3人以上いる時のみ
-                chairmanMassRelease();
+            } else if (r < 0.65) {
+                // 3. 推薦 (15%)
+                chairmanRecommend();
+
+            } else if (r < 0.80) {
+                // 4. 個別釈放 (15%)：追放者がいれば実行
+                if (expelled.size) chairmanRelease();
+
+            } else if (r < 0.90) {
+                // 5. 集団釈放 (10%)：追放者がいれば実行
+                if (expelled.size) chairmanMassRelease();
 
             } else {
-                // 6. 大粛清 (20%)
+                // 6. 大粛清 (10%)
                 chairmanPurge();
             }
         }
+
 
 
         function appointVice() {
@@ -1799,7 +2034,7 @@
                 }
 
                 // 4. 個別の通知
-                addBubble("システム", `🔓 ${v.name} は会議に復帰した。`, "", false);
+                addBubble("システム", `🔓 ${v.name} は釈放された。`, "", false);
             }
 
             // 5. UI（人数表示）の更新
@@ -1866,6 +2101,112 @@
             return name;
         }
 
+        // パネルを開く
+        let selectedIconData = null; // 選択された画像データを保持する変数
+
+        // ファイルが選択された時の処理
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                selectedIconData = e.target.result; // Base64形式の画像データ
+                updateInvitePreview();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 選択した画像をリセット
+        function clearSelectedFile() {
+            document.getElementById('invite-file-input').value = "";
+            selectedIconData = null;
+            updateInvitePreview();
+        }
+
+        // プレビューの更新
+        function updateInvitePreview() {
+            const name = document.getElementById("invite-name-input").value.trim();
+            const previewImg = document.getElementById("invite-icon-preview");
+
+            if (selectedIconData) {
+                // アップロードされた画像がある場合
+                previewImg.src = selectedIconData;
+            } else {
+                // ない場合はDiceBearで自動生成
+                const seed = name || "question";
+                previewImg.src = `https://api.dicebear.com{encodeURIComponent(seed)}`;
+            }
+        }
+
+        // 招待実行
+        function executeInvite() {
+            const name = document.getElementById("invite-name-input").value.trim();
+
+            if (!name) {
+                alert("名前を入力してください。");
+                return;
+            }
+
+            if (activeMembers.some(m => m.name === name)) {
+                alert("その名前のメンバーは既に参加しています。");
+                return;
+            }
+
+            // アイコンの決定（アップロード画像 > 自動生成）
+            const finalIcon = selectedIconData || `https://api.dicebear.com{encodeURIComponent(name)}`;
+
+            const baseBrain = data.brain[name] ? data.brain[name] : data.brain;
+
+            let newMember = {
+                type: "ai",
+                name: name,
+                image: finalIcon,
+                brain: JSON.parse(JSON.stringify(baseBrain)),
+                fav: "",
+                ng: "",
+                isIndividual: true
+            };
+
+            activeMembers.push(newMember);
+
+            const title = typeof chairmanTitle !== 'undefined' ? chairmanTitle : '議長';
+            addBubble("システム",
+                `👥 ${title} ${chairman?.name || ''} は **${name}** を会議に招待しました。`,
+                "",
+                false
+            );
+
+            // 人数表示更新
+            const titleEl = document.getElementById('header-title');
+            if (titleEl) titleEl.innerText = `会議中 (${activeMembers.length}名)`;
+
+            closeInvitePanel();
+        }
+
+        // パネルを開く際のリセット
+        function openInvitePanel() {
+            document.getElementById("invite-name-input").value = "";
+            document.getElementById("invite-file-input").value = "";
+            selectedIconData = null;
+            updateInvitePreview();
+
+            // 過去メンバーのセレクトボックス更新（既存のロジック）
+            const select = document.getElementById("invite-select-pool");
+            const globalKeys = Object.keys(data.brain || {});
+            const pool = globalKeys.filter(k =>
+                !activeMembers.some(m => m.name === k) &&
+                !(expelled instanceof Set ? expelled.has(k) : expelled.includes(k))
+            );
+            select.innerHTML = '<option value="">-- 選択してください --</option>' +
+                pool.map(name => `<option value="${name}">${name}</option>`).join("");
+
+            document.getElementById("invite-panel").style.display = "block";
+        }
+
+        function closeInvitePanel() {
+            document.getElementById("invite-panel").style.display = "none";
+        }
 
 
         function chairmanInvite() {
@@ -2094,13 +2435,19 @@
 
         // --- データ管理 ---
         function saveData() {
-            localStorage.setItem('ai_data_v7', JSON.stringify(data));
+            localStorage.setItem('conference_app_data', JSON.stringify(data));
         }
+
 
         function saveSettings() {
             data.userName = document.getElementById('username').value;
             data.aiName = document.getElementById('edit-ai-name').value;
             data.backgroundImage = document.getElementById('edit-bg-url').value;
+
+            // ★ dataオブジェクトに設定をまとめる
+            data.chairmanMode = document.getElementById("chk-chairman").checked;
+            data.chairmanTitle = document.getElementById("chairman-title").value;
+            data.electionMode = document.getElementById("election-mode").value;
 
             const uFile = document.getElementById('user-icon-file').files[0];
             const aFile = document.getElementById('edit-ai-file').files[0];
@@ -2109,18 +2456,36 @@
             if (uFile) p.push(toBase64(uFile).then(r => data.userImage = r));
             if (aFile) p.push(toBase64(aFile).then(r => data.aiImage = r));
 
-            // 設定オブジェクトに反映
-            chairmanMode = document.getElementById("chk-chairman").checked;
-            chairmanTitle = document.getElementById("chairman-title").value;
-            electionMode = document.getElementById("election-mode").value;
-
-
             Promise.all(p).then(() => {
-                saveData();
+                saveData(); // ここで localStorage.setItem("key", JSON.stringify(data)) を実行している前提
                 updateUI();
-                alert("保存しました");
+                alert("設定を保存しました");
             });
         }
+        function loadSettings() {
+            const saved = localStorage.getItem('conference_app_data');
+            if (saved) {
+                data = JSON.parse(saved);
+
+                // UIに反映
+                document.getElementById('username').value = data.userName || "";
+                document.getElementById('edit-ai-name').value = data.aiName || "";
+                document.getElementById('edit-bg-url').value = data.backgroundImage || "";
+
+                // 議長設定の復元
+                document.getElementById("chk-chairman").checked = data.chairmanMode || false;
+                document.getElementById("chairman-title").value = data.chairmanTitle || "議長";
+                document.getElementById("election-mode").value = data.electionMode || "random";
+
+                // グローバル変数へ同期
+                chairmanMode = data.chairmanMode;
+                chairmanTitle = data.chairmanTitle;
+                electionMode = data.electionMode;
+
+                console.log("データを復元しました");
+            }
+        }
+
 
         function resetMemory() {
             if (confirm("【警告】\nAIが覚えた言葉をすべて消去します。\n元に戻せませんが、本当によろしいですか？")) {
