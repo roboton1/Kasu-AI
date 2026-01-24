@@ -340,6 +340,9 @@
                 🧬 マイAI (あなたの学習データ)
                 <button class="btn btn-blue" style="font-size:0.7em; padding:2px 8px; margin-left:10px;"
                     onclick="addMyAIClone()">+ 追加</button>
+                <button class="btn btn-blue" style="font-size:0.7em; padding:2px 8px; margin-left:10px;"
+                    onclick="addMyAIClone_dummy()">
+                    + 画像と名前付きAIを追加</button>
             </div>
             <div id="my-ai-clones-list">
             </div>
@@ -360,8 +363,9 @@
         <div id="chairmanPanel" style="display:none; border:2px solid #888; padding:10px; margin-top:10px;">
             <b>👑 議長パネル</b><br>
             <button onclick="chairmanKick()">追放</button>
-            <button onclick="chairmanRecommend()">推薦</button>
+            <button onclick="chairmanRecommend()">後継者を決める</button>
             <button onclick="chairmanResign()">辞任</button>
+
         </div>
 
 
@@ -384,8 +388,9 @@
         <label><input type="checkbox" id="chk-chairman" checked> 議長モード有効</label><br>
         タイトル: <input type="text" id="chairman-title" value="議長"><br>
         <select id="election-mode">
-            <option value="manual">プレイヤー指定</option>
             <option value="vote">選挙で決定</option>
+            <option value="manual">ランダム（実験的）</option>
+
         </select>
 
 
@@ -427,25 +432,34 @@
             reader.onload = (e) => {
                 try {
                     const text = e.target.result;
-                    const data = JSON.parse(text); // ← JSONとして読む
+                    const data = JSON.parse(text);
 
-                    // 構造チェック
-                    if (!data.brain || !data.aiName) {
+                    if (!data.brain) {
                         alert("不正なAIデータです");
                         return;
                     }
 
-                    const item = input.closest('.clone-item');
+                    // ✅ brainから名前生成
+                    let name = data.aiName || generateName(data.brain);
 
-                    item.aiSpecificBrain = {
-                        aiName: data.aiName || "AI",
-                        brain: data.brain || {},
-                        aiImage: data.aiImage || "",
-                        backgroundImage: data.backgroundImage || ""
+                    // ✅ avatar生成
+                    let avatar = `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(name)}`;
+
+                    let newMember = {
+                        type: "ai",
+                        name,
+                        image: avatar,
+                        brain: JSON.parse(JSON.stringify(data.brain)),
+                        fav: "",
+                        ng: "",
+                        isIndividual: true
                     };
 
-                    alert("ロード完了！ " + data.aiName);
-                    console.log("Loaded AI:", item.aiSpecificBrain);
+                    // ✅ 登録
+                    activeMembers.push(newMember);
+
+                    console.log("Loaded AI:", newMember);
+                    addBubble("システム", `🤖 ${name} をロードしました`, "", false);
 
                 } catch (err) {
                     console.error(err);
@@ -455,6 +469,8 @@
 
             reader.readAsText(file);
         };
+
+
 
 
         window.toggleBrainFileBtn = function (select) {
@@ -513,7 +529,9 @@
         let playerAlive = true;
         let electionMode = "vote";   // manual / vote
         let settings = {
-            chairmanMode: true
+            chairmanMode: true,
+            chairmanTitle: "議長",
+            electionMode: "vote"
         };
         let in_vote = true;
 
@@ -575,19 +593,79 @@
                     記憶: <select class="clone-brain-type" onchange="toggleBrainFileBtn(this)">
                         <option value="share">共有記憶</option>
                         <option value="empty">記憶：空から</option>
-                        <option value="individual">個別：ファイル</option>
                     </select>
                 </div>
                 <div class="brain-file-area" style="display:none;">
                     <button class="btn btn-blue" style="font-size:0.8em; padding:2px 5px;" onclick="this.nextElementSibling.click()">ファイル選択</button>
                     <input type="file" class="clone-brain-file" style="display:none;" onchange="window.loadSpecificBrain(this)">
                 </div>
-                <div>口癖: <input type="text" class="clone-fav-word" placeholder="～なのだ" style="width:100px;"></div>
-                <div>禁止: <input type="text" class="clone-ng-word" placeholder="ダメな言葉" style="width:100px;"></div>
             </div>
         </details>
     `;
             list.appendChild(div);
+            //                         <option value="individual">個別：ファイル</option> //
+        }
+
+
+        // 2. 名前の取得と反映を行う非同期関数
+        async function setupAI() {
+            try {
+                // APIからランダムなユーザー情報を取得
+                const response = await fetch('https://randomuser.me/api');
+                const result = await response.json();
+                const fetchedName1 = result.results[0].name.first; // 例: "John"
+
+                const fetchedName = result.results[0].name.last; // 例: "John"
+
+                // 取得した名前を seed に使って画像を生成
+                data.aiName = fetchedName1 + " " + fetchedName;
+                data.aiImage = `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(fetchedName)}`;
+
+                console.log("生成完了:", data);
+            } catch (error) {
+                console.error("取得失敗:", error);
+            }
+        }
+
+        // 関数を実行
+
+        function addMyAIClone_dummy() {
+            const list = document.getElementById('my-ai-clones-list');
+            const div = document.createElement('div');
+            div.className = 'clone-item';
+            div.style.flexDirection = 'column'; // 縦に並べる
+            div.style.alignItems = 'flex-start';
+            div.aiSpecificBrain = {};
+            setupAI();
+
+
+            div.innerHTML = `
+        <div style="display:flex; align-items:center; width:100%;">
+            <input type="file" class="clone-icon-file" style="display:none;" onchange="updateCloneIcon(this)">
+            <img src="${data.aiImage}" class="clone-icon-preview" style="width:30px; height:30px; border-radius:50%; cursor:pointer;" onclick="this.previousElementSibling.click()">
+            <input type="text" value="${data.aiName}" class="clone-name-input" style="width:80px; margin:0 5px;">
+            <button class="btn btn-red" style="padding:2px 8px; margin-left:auto;" onclick="this.parentElement.parentElement.remove()">×</button>
+            
+        </div>
+        
+        <details style="font-size:0.8em; width:100%; margin-top:5px; color:#666;">
+            <summary style="cursor:pointer; color:var(--main-color);">詳細設定 (記憶・口癖)</summary>
+            <div style="padding:5px; background:#f9f9f9; border-radius:5px; margin-top:5px; display:grid; gap:5px;">
+                <div>
+                    記憶: <select class="clone-brain-type" onchange="toggleBrainFileBtn(this)">
+                        <option value="share">共有記憶</option>
+                        <option value="empty">記憶：空から</option>
+                    </select>
+                </div>
+                <div class="brain-file-area" style="display:none;">
+                    <button class="btn btn-blue" style="font-size:0.8em; padding:2px 5px;" onclick="this.nextElementSibling.click()">ファイル選択</button>
+                    <input type="file" class="clone-brain-file" style="display:none;" onchange="window.loadSpecificBrain(this)">
+                </div>
+            </div>
+        </details>
+    `;
+            list.appendChild(div);
+            //                         <option value="individual">個別：ファイル</option> //
         }
 
         // プレビュー表示を復活させる関数
@@ -620,15 +698,11 @@
             items.forEach(item => {
                 const name = item.querySelector('.clone-name-input')?.value || "";
                 const icon = item.querySelector('.clone-icon-preview')?.src || "";
-                const fav = item.querySelector('.clone-fav-word')?.value || "";
-                const ng = item.querySelector('.clone-ng-word')?.value || "";
                 const brainType = item.querySelector('.clone-brain-type')?.value || "share";
 
                 data.push({
                     name,
                     icon,
-                    fav,
-                    ng,
                     brainType,
                     brain: item.aiSpecificBrain || {}
                 });
@@ -674,7 +748,6 @@
                     alert("会議メンバーを読み込みました");
                 } catch (e) {
                     alert("読み込み失敗");
-                    console.error(e);
                 }
             };
 
@@ -708,6 +781,7 @@
             area.appendChild(timer);
 
             const yesBtn = document.createElement("button");
+
             yesBtn.textContent = "立候補する";
 
             const noBtn = document.createElement("button");
@@ -752,6 +826,10 @@
 
 
         async function startElection() {
+            if (chairman = data.userName) {
+                closeChairmanPanel();
+
+            }
             is_vote = true;
 
             if (!settings.chairmanMode) {
@@ -783,17 +861,33 @@
             await sleep(400);
             addBubble("システム", "👤 あなたは立候補しますか？", "", false);
 
-            await new Promise(resolve => {
-                showRunButtons((run) => {
-                    if (run) {
-                        candidates.push({ name: data.userName, isPlayer: true, image: data.userImage }); // ← オブジェクト化
-                        addBubble(data.userName, `私は${chairmanTitle}に立候補します。`, data.userImage || "", true);
-                    } else {
-                        addBubble(data.userName, `私は${chairmanTitle}に立候補しません。`, data.userImage || "", true);
-                    }
-                    resolve();
+            if (chairman = data.userName) {
+
+                await new Promise(resolve => {
+                    showRunButtons((run) => {
+                        if (run) {
+                            candidates.push({ name: data.userName, isPlayer: true, image: data.userImage }); // ← オブジェクト化
+                            addBubble(data.userName, `私は${chairmanTitle}の${termCount}に挑戦します。`, data.userImage || "", true);
+                        } else {
+                            addBubble(data.userName, `私は次期${chairmanTitle}の選挙に立候補しません。`, data.userImage || "", true);
+                        }
+                        resolve();
+                    });
                 });
-            });
+
+            } else {
+                await new Promise(resolve => {
+                    showRunButtons((run) => {
+                        if (run) {
+                            candidates.push({ name: data.userName, isPlayer: true, image: data.userImage }); // ← オブジェクト化
+                            addBubble(data.userName, `私は${chairmanTitle}に立候補します。`, data.userImage || "", true);
+                        } else {
+                            addBubble(data.userName, `私は${chairmanTitle}に立候補しません。`, data.userImage || "", true);
+                        }
+                        resolve();
+                    });
+                });
+            }
 
 
             if (candidates.length === 0) {
@@ -1281,12 +1375,12 @@
 
             // NPCが派閥を抜ける
             else if (r < 0.9) {
-                let pool = npcMembers.filter(m => m.faction);
+                let pool = npcMembers.filter(m => m.faction && m.name !== data.userName);
                 if (pool.length) leaveFaction(pool[Math.floor(Math.random() * pool.length)]);
             }
 
             // --- 除名処分 ---
-            if (Math.random() < 0.1) { // 30% 確率で除名イベント
+            if (Math.random() < 0.1) { // 10% 確率で除名イベント
                 maybeFactionExpel();
             }
 
@@ -1474,8 +1568,6 @@
                     name: item.querySelector('.clone-name-input').value,
                     image: image,
                     brain: targetBrain,
-                    fav: item.querySelector('.clone-fav-word').value,
-                    ng: item.querySelector('.clone-ng-word').value,
                     isIndividual: (brainType !== 'share')
                 });
 
@@ -1526,6 +1618,19 @@
 
             conferenceTimer = setTimeout(() => {
                 if (!conferenceRunning) return;
+                if (activeMembers.length < 2) {
+                    addBubble("システム", "⚠ 参加者が不足しています。一部の人を釈放します。", "", false);
+                    if (expelled.size > 0) {
+                        let r = expelled.values().next().value;
+                        expelled.delete(r);
+                        activeMembers.push(r);
+                        addBubble("システム", `✅ ${r.name} を釈放しました。`, "", false);
+                        document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
+                    } else {
+                        stopConference();
+                        return;
+                    }
+                }
 
                 const body = generate(speaker.brain, lastTopic);
 
@@ -1536,7 +1641,9 @@
                 }
 
                 addBubble(speaker.name, body, speaker.image, false);
-                maybeFactionAction();
+                if (chairmanMode) {
+                    maybeFactionAction();
+                }
 
 
                 runConferenceLoop(body);
@@ -1551,32 +1658,42 @@
         function maybeChairmanAction() {
             if (!chairman) return;
 
-            if (Math.random() > 50.25) return;
+            // 💡 修正: Math.random() は 0.0〜1.0 なので、発生率を調整（例: 25%の確率で発動）
+            if (Math.random() > 0.25) return;
 
             let r = Math.random();
-
-            // 🎯 対象候補（議長以外・生存者）
             let pool = activeMembers.filter(m => m !== chairman);
 
+            // 何もできない状態なら終了
             if (!pool.length && expelled.size === 0) return;
 
-            if (r < 0.3 && pool.length) {
+            if (r < 0.25 && pool.length) {
+                // 1. 追放 (25%)
                 let target = pool[Math.floor(Math.random() * pool.length)];
                 chairmanExpel(target);
 
-            } else if (r < 0.45) {
+            } else if (r < 0.40) {
+                // 2. 推薦 (15%)
                 chairmanRecommend();
 
-            } else if (r < 0.6) {
+            } else if (r < 0.50) {
+                // 3. 招待 (10%)
                 chairmanInvite();
 
-            } else if (r < 0.75 && expelled.size) {
+            } else if (r < 0.65 && expelled.size) {
+                // 4. 個別釈放 (15%)
                 chairmanRelease();
 
+            } else if (r < 0.80 && expelled.size >= 3) {
+                // 5. 【新規】集団釈放 (15%) ※追放者が3人以上いる時のみ
+                chairmanMassRelease();
+
             } else {
+                // 6. 大粛清 (20%)
                 chairmanPurge();
             }
         }
+
 
         function appointVice() {
             let pool = activeMembers.filter(m =>
@@ -1654,6 +1771,46 @@
             // 会議中メンバー数更新
             document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
         }
+
+        function chairmanMassRelease() {
+            // 1. 釈放対象（追放者）がいるかチェック
+            if (!expelled || expelled.size === 0) return;
+
+            let victims = Array.from(expelled); // 追放者リスト
+            // 釈放する人数を決定（例：追放者の50%、最低1人）
+            let releaseCount = Math.max(1, Math.floor(victims.length * 0.5));
+
+            addBubble("システム",
+                `🕊️ ${chairmanTitle} ${chairman.name} は恩赦を出し、集団釈放を決定した。`,
+                "",
+                false
+            );
+
+            for (let i = 0; i < releaseCount; i++) {
+                // ランダムに一人選ぶ
+                let v = victims.splice(Math.floor(Math.random() * victims.length), 1)[0];
+                if (!v) continue;
+
+                // 2. 内部データの移動
+                expelled.delete(v);
+                activeMembers.push(v);
+
+                // 3. プレイヤー復帰判定
+                if (v.type === "user") {
+                    playerAlive = true;
+                }
+
+                // 4. 個別の通知
+                addBubble("システム", `🔓 ${v.name} は会議に復帰した。`, "", false);
+            }
+
+            // 5. UI（人数表示）の更新
+            const headerTitle = document.getElementById('header-title');
+            if (headerTitle) {
+                headerTitle.innerText = `会議中 (${activeMembers.length}名)`;
+            }
+        }
+
 
         function chairmanRecommend() {
             let pool = activeMembers.filter(m =>
@@ -1747,24 +1904,49 @@
 
 
         function chairmanRelease() {
-            if (!expelled.size) return;
+            console.log("関数開始: expelledの状態", expelled);
+
+            // チェック1: 中身があるか
+            if (!expelled || (expelled.size === 0 && expelled.length === 0)) {
+                console.warn("釈放対象がいません（expelledが空です）");
+                return;
+            }
 
             let list = Array.from(expelled);
             let member = list[Math.floor(Math.random() * list.length)];
+            console.log("選ばれたメンバー:", member);
 
-            if (!member || !member.name) return;
+            // チェック2: メンバーのプロパティがあるか
+            if (!member) {
+                console.error("メンバーの取得に失敗しました");
+                return;
+            }
+            if (!member.name) {
+                console.error("メンバーにnameプロパティがありません。中身:", member);
+                return;
+            }
 
-            expelled.delete(member);
+            // 実行処理
+            if (expelled instanceof Set) {
+                expelled.delete(member);
+            } else {
+                // 配列の場合の削除処理
+                const index = expelled.indexOf(member);
+                if (index > -1) expelled.splice(index, 1);
+            }
+
             activeMembers.push(member);
 
-            if (member.type === data.userName) playerAlive = true;
+            if (member.type === "user") playerAlive = true;
 
             addBubble("システム",
-                `🔓 ${chairmanTitle} ${chairman.name} は ${member.name} を釈放した。`,
+                `🔓 ${typeof chairmanTitle !== 'undefined' ? chairmanTitle : ''} ${chairman?.name || '議長'} は ${member.name} を釈放した。`,
                 "",
                 false
             );
+            console.log("釈放成功:", member.name);
         }
+
 
 
 
@@ -1918,7 +2100,7 @@
         }
 
         function saveSettings() {
-            data.userName = document.getElementById('user-name').value;
+            data.userName = document.getElementById('username').value;
             data.aiName = document.getElementById('edit-ai-name').value;
             data.backgroundImage = document.getElementById('edit-bg-url').value;
 
@@ -1929,8 +2111,9 @@
             if (uFile) p.push(toBase64(uFile).then(r => data.userImage = r));
             if (aFile) p.push(toBase64(aFile).then(r => data.aiImage = r));
 
+            // 設定オブジェクトに反映
             chairmanMode = document.getElementById("chk-chairman").checked;
-            chairmanTitle = document.getElementById("chairman-title").value || "議長";
+            chairmanTitle = document.getElementById("chairman-title").value;
             electionMode = document.getElementById("election-mode").value;
 
 
@@ -1982,9 +2165,8 @@
             div.appendChild(row);
 
             // 下にいる場合だけ自動スクロール
-            if (isAtBottom) {
-                div.scrollTop = div.scrollHeight;
-            }
+            div.scrollTop = div.scrollHeight;
+
         }
 
 
