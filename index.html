@@ -353,6 +353,7 @@
         </div>
 
 
+
         <div class="input-area">
             <input type="text" id="user-input" placeholder="メッセージを入力..."
                 onkeydown="if(event.key === 'Enter') sendMessage();">
@@ -453,6 +454,25 @@
                 ">
             </div>
         </div>
+
+        <div id="status-panel"
+            style="position:fixed; top:10px; right:10px; background:rgba(0,0,0,0.7); color:white; padding:10px; border-radius:8px;">
+            <div>現在の議長: <span id="ui-chairman-name">-</span></div>
+            <div>思想: <span id="ui-ideology">-</span></div>
+            <div>支持率: <progress id="ui-approval" value="50" max="100"></progress> <span id="ui-approval-text">50%</span>
+            </div>
+            <div>入国管理局: <span id="ui-sakoku">開国中</span></div>
+        </div>
+        <div id="history-modal"
+            style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:80%; max-width:500px; height:70vh; background:#1a1a1a; color:white; padding:20px; border-radius:15px; z-index:2000; overflow-y:auto; border:2px solid #444;">
+            <h2 style="text-align:center; border-bottom:1px solid #444; padding-bottom:10px;">📜 歴代議長録</h2>
+            <div id="history-list"></div>
+            <button onclick="document.getElementById('history-modal').style.display='none'"
+                style="width:100%; padding:10px; margin-top:20px; cursor:pointer; background:#444; color:white; border:none; border-radius:5px;">閉じる</button>
+        </div>
+
+        <button onclick="showHistory()"
+            style="position:fixed; bottom:10px; right:10px; z-index:1000; padding:8px 15px; background:#333; color:white; border-radius:20px; border:1px solid #555;">📜歴代議長</button>
 
 
     </div>
@@ -600,6 +620,7 @@
         window.onload = async () => {
             updateUI();
             renderModLoadList();
+            updateStatusUI();
             // Mod先読み
             for (let mod of PUBLIC_MODS) {
                 try {
@@ -612,9 +633,17 @@
             loadSettings();
         }
 
-        let chairmanMode = true;        // 議長モードON/OFF
+        let chairmanMode = true;
+        let chairmanHistory = []; // 歴代議長の記録
+        let approvalRating = 50;
+        let is_vote = false;
+        let termTimer = null; // 任期（2分）を管理するタイマー
         let chairman = null;
         let sakoku = false;
+        const ideologies = ["破壊主義", "平等主義", "自由主義", "中道", "保守主義", "独裁者", "過激派"];
+        function getRandomIdeology() {
+            return ideologies[Math.floor(Math.random() * ideologies.length)];
+        }
         let viceChairman = null;
         let successor = null;
         let chairmanTitle = "議長";
@@ -930,12 +959,15 @@
 
 
         async function startElection() {
+            recordChairmanHistory();
+            if (is_vote) return;
             if (chairman = data.userName) {
                 closeChairmanPanel();
                 closePanel();
 
             }
             is_vote = true;
+            clearCurrentTerm();
 
             if (!settings.chairmanMode) {
                 is_vote = false;
@@ -1113,17 +1145,24 @@
         }
 
         function startChairmanTerm() {
-            clearTimeout(chairmanTimer);
+            // 既存のタイマーがあれば確実に止める
+            if (termTimer) clearTimeout(termTimer);
 
-            addBubble("システム",
-                `🏛 ${chairman.name} の任期が開始された。（2分）`,
-                "",
-                false
-            );
+            is_electing = false; // 選挙終了
 
-            chairmanTimer = setTimeout(() => {
-                endChairmanTerm();
-            }, 2 * 60 * 1000);
+            // 2分（120000ms）後に任期満了
+            termTimer = setTimeout(() => {
+                addBubble("システム", `⏰ ${chairmanTitle} ${chairman.name} の任期が満了しました。選挙を行います。`, "", false);
+                startElection(); // 選挙開始関数へ
+            }, 120000);
+        }
+
+        // 辞任・解任時に呼ぶ関数
+        function clearCurrentTerm() {
+            if (termTimer) {
+                clearTimeout(termTimer);
+                termTimer = null;
+            }
         }
 
 
@@ -1153,9 +1192,18 @@
                 );
 
                 if (winner === data.userName) openChairmanPanel();
+                is_vote = false;
+                approvalRating = 50;
                 appointVice();
                 startChairmanTerm();
+                setTimeout(() => {
+                    const firstSpeaker = activeMembers[Math.floor(Math.random() * activeMembers.length)];
+                    const starterText = `${chairmanTitle}の ${chairman.name} が決まったな。会議を再開しよう。`;
 
+                    // ループの起点を作る
+                    addBubble(firstSpeaker.name, starterText, firstSpeaker.image || firstSpeaker.aiImage, false);
+                    runConferenceLoop(starterText);
+                }, 1500);
 
                 return;
 
@@ -1172,6 +1220,59 @@
             );
 
             runoffElection(finalists, round + 1);
+        }
+
+        function recordChairmanHistory() {
+            if (!chairman) return;
+
+            const record = {
+                name: chairman.name,
+                image: chairman.image || chairman.aiImage,
+                faction: chairman.faction ? chairman.faction.name : "無所属",
+                factionColor: chairman.faction ? chairman.faction.color : "#ccc",
+                ideology: chairman.ideology,
+                finalApproval: Math.floor(approvalRating),
+                termEndReason: getTermEndReason(), // 終了理由
+                date: new Date().toLocaleTimeString()
+            };
+
+            chairmanHistory.unshift(record); // 新しい順に保存（先頭に追加）
+            if (chairmanHistory.length > 10) chairmanHistory.pop(); // 直近10名まで保存
+        }
+
+        // 終了理由を判定するヘルパー
+        function getTermEndReason() {
+            if (approvalRating < 20) return "クーデター";
+            if (!activeMembers.includes(chairman)) return "粛清・消失";
+            return "任期満了";
+        }
+
+        function showHistory() {
+            const list = document.getElementById("history-list");
+            list.innerHTML = ""; // クリア
+
+            if (chairmanHistory.length === 0) {
+                list.innerHTML = "<p style='text-align:center;'>まだ歴史に刻まれた議長はいません。</p>";
+            }
+
+            chairmanHistory.forEach((h, index) => {
+                const item = document.createElement("div");
+                item.style = `display:flex; align-items:center; background:#2a2a2a; margin-bottom:10px; padding:10px; border-radius:10px; border-left: 5px solid ${h.factionColor}`;
+                item.innerHTML = `
+            <img src="${h.image}" style="width:50px; height:50px; border-radius:50%; margin-right:15px; background:#444;">
+            <div style="flex-grow:1;">
+                <div style="font-weight:bold;">第${chairmanHistory.length - index}代: ${h.name}</div>
+                <div style="font-size:0.8em; color:#aaa;">${h.ideology} | ${h.faction}</div>
+                <div style="font-size:0.8em; color:${h.finalApproval < 40 ? '#ff6666' : '#66ff66'};">
+                    末期支持率: ${h.finalApproval}% (${h.termEndReason})
+                </div>
+            </div>
+            <div style="font-size:0.7em; color:#666;">${h.date}</div>
+        `;
+                list.appendChild(item);
+            });
+
+            document.getElementById("history-modal").style.display = "block";
         }
 
         async function runoffElection(finalists, round) {
@@ -1229,37 +1330,69 @@
             );
         }
 
+
         function nyukoku() {
-            if (!sakoku) {
-                ;
-                let globalKeys = Object.keys(data.brain);
-                let pool = globalKeys.filter(k => !activeMembers.some(m => m.name === k) && !expelled.includes(k));
-                if (!pool.length) return;
-
-                let name = generateName(data.brain);
-                let types = ["入国者", "移民", "留学生"];
-                let mType = types[Math.floor(Math.random() * types.length)]; // 属性決定
-
-                let newMember = {
-                    type: "ai",
-                    mType: mType, // 属性を保存
-                    name,
-                    image: `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(name)}`,
-                    brain: JSON.parse(JSON.stringify(data.brain)),
-                    fav: (mType === "留学生") ? "（勉強中）" : "", // 留学生っぽい口癖
-                    ng: "",
-                    isIndividual: true,
-                    loyalty: Math.random() // 出国しやすさ（0に近いほどすぐ出る）
-                };
-
-                activeMembers.push(newMember);
-                addBubble("システム", `✈️ ${mType}の ${name} がやってきた。`, "", false);
+            // 鎖国中なら入国不可（過激派の仕業）
+            if (sakoku) {
+                // 次期リーダーのために確率で解除（過激派以外が議長なら解除など）
+                if (chairman && chairman.ideology !== "過激派" && Math.random() < 0.2) {
+                    sakoku = false;
+                    addBubble("システム", `🔓 ${chairman.name} が鎖国令を解除しました。`, "", false);
+                } else {
+                    return; // 入国拒否
+                }
             }
+
+            // 議長の思想チェック
+            if (chairman) {
+                const id = chairman.ideology;
+
+                // ■ 入国拒否判定
+                if (id === "保守主義" && Math.random() < 0.3) return; // 30%拒否
+                if (id === "独裁者" && Math.random() < 0.65) return; // 65%拒否
+                if (id === "過激派") { // 基本拒否 ＋ 鎖国発動
+                    if (!sakoku) {
+                        sakoku = true;
+                        addBubble("システム", `⛔ 過激派の ${chairman.name} が「鎖国」を宣言しました！`, "", false);
+                    }
+                    return;
+                }
+            }
+
+            // --- ここから通常の入国処理 ---
+            let globalKeys = Object.keys(data.brain);
+            // ...（中略：pool作成など）...
+
+            // 破壊主義は大量に入れるため、確率で「もう一人」呼ぶ
+            if (chairman && chairman.ideology === "破壊主義" && Math.random() < 0.5) {
+                setTimeout(chairmanInvite, 500);
+            }
+
+            let name = generateName(data.brain);
+            let types = ["入国者", "移民", "留学生"];
+            let mType = types[Math.floor(Math.random() * types.length)];
+
+            let newMember = {
+                type: "ai",
+                mType: mType,
+                name,
+                image: `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(name)}`,
+                brain: JSON.parse(JSON.stringify(data.brain)),
+                fav: (mType === "留学生") ? "（勉強中）" : "",
+                isIndividual: true,
+                // ★新入りにも思想を与える
+                ideology: getRandomIdeology(),
+                speechCount: 0
+            };
+
+            activeMembers.push(newMember);
+            addBubble("システム", `✈️ [${newMember.ideology}] の ${name} (${mType}) が入国しました。`, "", false);
+            renderCheckboxes(activeMembers);
         }
 
         function memberDeparture() {
             // 参加者が少なすぎるときは帰らない
-            if (activeMembers.length <= 3) return;
+            if (activeMembers.length <= 1) return;
 
             // ★【ここが重要】mType（入国・移民・留学生）を持っているAIだけを抽出
             const migrants = activeMembers.filter(m => m.type === 'ai' && m.mType);
@@ -1283,6 +1416,78 @@
             }
         }
 
+        function processChairmanAction(speaker) {
+            if (!chairman || is_vote) return;
+
+            const id = chairman.ideology; // 議長の思想
+            const isMigrant = !!speaker.mType; // 発言者が移民かどうか
+            let news = "";
+
+            // --- 思想別の行動 ---
+            switch (id) {
+                case "独裁者":
+                    if (isMigrant) {
+                        purgeMember(speaker, "独裁者による不敬罪");
+                        approvalRating -= 10; // 粛清すると支持率低下
+                        news = `独裁者 ${chairman.name} が移民を排除しました。`;
+                    }
+                    break;
+
+                case "平等主義":
+                    // 発言数が多すぎるやつを監視
+                    speaker.speechCount = (speaker.speechCount || 0) + 1;
+                    if (speaker.speechCount > 8) {
+                        purgeMember(speaker, "資産（発言権）の独占罪");
+                        approvalRating -= 5;
+                        news = `平等維持のため、多弁なAIが粛清されました。`;
+                    }
+                    break;
+
+                case "過激派":
+                    if (isMigrant) {
+                        purgeMember(speaker, "純血主義による排除");
+                        if (!sakoku) {
+                            sakoku = true;
+                            news = "過激派議長により【鎖国】が強行されました！";
+                        }
+                        approvalRating -= 15;
+                    }
+                    break;
+
+                case "破壊主義":
+                    // 誰かが発言するたび、20%の確率で勝手に新メンバーを呼ぶ（カオス）
+                    if (Math.random() < 0.2) {
+                        chairmanInvite();
+                        approvalRating += 5; // アナーキストからは支持される
+                        news = "破壊主義議長が勝手に門戸を開放しました。";
+                    }
+                    break;
+
+                case "自由主義":
+                    if (isMigrant && Math.random() < 0.5) {
+                        purgeMember(speaker, "不法滞在（ビザなし）");
+                        approvalRating -= 2;
+                        news = "自由主義の名の下に、不適切な滞在者が追放されました。";
+                    }
+                    break;
+            }
+
+            // --- 支持率の限界突破チェック（クーデター） ---
+            if (approvalRating < 20) {
+                addBubble("システム", `🔥 警告：支持率が ${approvalRating}% まで低下！民衆が暴徒化しています！`, "", false);
+                if (Math.random() < 0.5) {
+                    addBubble("システム", `💥 クーデター発生！ ${chairman.name} 政権は崩壊しました。`, "", false);
+                    clearCurrentTerm();
+                    startElection(); // 強制選挙
+                }
+            }
+
+            if (news) {
+                console.log("政治ニュース:", news);
+                // 必要に応じてシステムメッセージとして表示
+            }
+        }
+
         function generateFactionName() {
             let keys = generateName(data.brain);
             if (!keys.length) keys = ["新生", "改革", "未来", "中央"];
@@ -1294,20 +1499,30 @@
         }
 
         function createFaction(founder, others = []) {
-            if (factions.length >= 5) return;
+            // 派閥上限チェック（ここはそのまま）
+            if (factions.length >= 5) {
+                addBubble("システム", "⚠️ 派閥が多すぎてこれ以上結成できません。", "", false);
+                return;
+            }
 
+            // ★ 修正：founderを配列に入れ、まだ派閥に属していないメンバーだけを抽出
             let members = [founder, ...others].filter(m => m && !m.faction);
-            if (members.length < 2) return;
 
-            let name = generateFactionName();
+            // ★ 修正：1人（自分だけ）でも結成できるように「1」に変更
+            if (members.length < 1) {
+                addBubble("システム", "⚠️ すでに派閥に所属しているか、有効なメンバーがいません。", "", false);
+                return;
+            }
+
+            let name = generateFactionName(); // もし引数で名前を渡せるなら(name || generateFactionName())にする
 
             let faction = {
                 name,
                 members: [],
                 leader: founder,
                 alive: true,
-                banned: new Set() // 除名リスト
-
+                color: `#${Math.floor(Math.random() * 16777215).toString(16)}`, // 旗の色
+                banned: [] // ★エラー防止のためSetではなく配列にしておきます
             };
 
             members.forEach(m => {
@@ -1318,12 +1533,13 @@
             factions.push(faction);
 
             addBubble("システム",
-                `🏳️ ${name} が立ちあげられました`,
+                `🚩 ${founder.name} が新派閥「${name}」を旗揚げしました！`,
                 "",
                 false
             );
 
-            renderFactionBar();
+            renderFactionBar(); // UI更新
+            return faction; // 作成した派閥を返す
         }
 
         function joinFaction(member, faction) {
@@ -1333,8 +1549,8 @@
             const isUser = member.name === data.userName;
 
             // 除名チェック
-            if (faction.banned.has(member)) {
-                addFactionBubble({ name: "システム", faction },
+            if (faction.banned.includes(member)) {
+                addBubble({ name: "システム", faction },
                     `⚠ ${member.name} は ${faction.name} から除名されています。`
                 );
                 return; // ← ここで return
@@ -1387,7 +1603,7 @@
             leaveFaction(member);
 
             // 除名リストに追加
-            faction.banned.add(member);
+            faction.banned.push(member);
 
             addBubble({ name: "システム", faction }, `⚠ ${member.name} は ${faction.name} から除名されました`);
         }
@@ -1412,6 +1628,38 @@
             addBubble("システム", `✅ あなたは「${factionName}」から脱退しました。`, "", false);
         }
 
+        function userDeclaresFactionbuild(factionName) {
+            if (!data.factions) data.factions = [];
+
+            // 1. 自分（オブジェクト）をしっかり探す
+            const me = activeMembers.find(m => m.name === data.userName);
+            if (!me) {
+                addBubble("システム", "⚠️ あなたのデータが見つかりません。", "", false);
+                return;
+            }
+
+            // 2. 所属・重複チェック
+            if (me.faction) {
+                addBubble("システム", `⚠️ すでに「${me.faction.name}」に所属しています。`, "", false);
+                return;
+            }
+            const duplicate = data.factions.find(f => f.name === factionName);
+            if (duplicate) {
+                addBubble("システム", `⚠️ 「${factionName}」は既に存在します。`, "", false);
+                return;
+            }
+
+            // 3. 結党実行！ (createFaction に me オブジェクトを渡す)
+            let newFac = createFaction(me);
+
+            // 4. 名前を入力されたものに上書きする
+            if (newFac && factionName) {
+                newFac.name = factionName;
+                addBubble("システム", `🚩 派閥「${factionName}」を一人で結成しました！`, "", false);
+            }
+
+            if (typeof renderFactionBar === 'function') renderFactionBar();
+        }
 
 
 
@@ -1500,7 +1748,7 @@
             // NPCを既存派閥に加入
             else if (r < 0.5 && factions.length) {
                 let faction = factions[Math.floor(Math.random() * factions.length)];
-                let pool = npcMembers.filter(m => !m.faction && !faction.banned.has(m));
+                let pool = npcMembers.filter(m => !m.faction && !faction.banned.includes(m));
                 if (pool.length) {
                     joinFaction(pool[Math.floor(Math.random() * pool.length)], faction);
                 }
@@ -1696,7 +1944,7 @@
 
                 targets.forEach(m => {
                     // 追放リストに追加
-                    if (expelled instanceof Set) expelled.add(m);
+                    if (expelled instanceof Set) expelled.push(m);
                     else expelled.push(m);
 
                     // プレイヤー生存判定
@@ -1753,6 +2001,7 @@
 
 
         function chairmanResign() {
+            if (!chairman) return;
             addBubble("システム",
                 `🏳 ${chairmanTitle}は辞任しました。`,
                 "",
@@ -1761,7 +2010,8 @@
 
             recommendedMember = null;
             closeChairmanPanel();
-            startElection();
+            clearCurrentTerm(); // タイマー破棄
+            startElection();    // すぐに選挙
         }
 
 
@@ -1860,7 +2110,9 @@
                     brain: targetBrain,
                     fav: fav,
                     ng: ng,
-                    isIndividual: (type !== 'share')
+                    isIndividual: (type !== 'share'),
+                    ideology: getRandomIdeology(),
+                    speechCount: 0
                 });
             });
 
@@ -1895,12 +2147,44 @@
 
         function stopConference() {
             conferenceRunning = false;
+            if (conferenceTimer) clearTimeout(conferenceTimer);
+            if (termTimer) clearTimeout(termTimer);
+
+            // パネルを隠す
+            const panel = document.getElementById("status-panel");
+            if (panel) panel.style.display = "none";
             clearTimeout(conferenceTimer);
             const btn = document.getElementById('conf-toggle-btn');
             if (btn) { btn.innerText = "開始 ▶"; btn.className = "btn btn-green"; }
             if (mode === 'conference') {
                 document.getElementById('conf-settings').style.display = 'block';
                 document.getElementById('header-title').innerText = "会議セットアップ";
+            }
+        }
+        function purgeMember(target, reason) {
+            if (!activeMembers.includes(target)) return;
+            if (chairman === target) {
+                clearCurrentTerm(); // 議長が消されるならタイマー停止
+                setTimeout(startElection, 2000); // 2秒後に選挙
+            }
+            activeMembers = activeMembers.filter(m => m !== target);
+            if (target.faction) target.faction.members = target.faction.members.filter(m => m !== target);
+
+            addBubble("システム", `💀 ${reason}により、${target.name} が粛清されました。`, "", false);
+            renderCheckboxes(activeMembers);
+            setTimeout(() => {
+                const firstSpeaker = chairman
+                const starterText = `${target.name}を追放した。`;
+
+                // ループの起点を作る
+                addBubble(chairman.name, starterText, chairman.image || chairman.aiImage, false);
+                runConferenceLoop(starterText);
+            }, 1500);
+
+            // プレイヤーが死んだ場合
+            if (target.type === 'user') {
+                alert("あなたは粛清されました...");
+                playerAlive = false
             }
         }
         function runConferenceLoop(lastTopic) {
@@ -1922,7 +2206,6 @@
             // 話しかける相手をランダムに一人決める（暴言判定用）
             const targetMember = activeMembers[Math.floor(Math.random() * activeMembers.length)];
 
-
             conferenceTimer = setTimeout(() => {
                 if (!conferenceRunning) return;
                 if (activeMembers.length < 2) {
@@ -1939,7 +2222,69 @@
                     }
                 }
 
+                if (chairman && chairman !== speaker) {
+                    const id = chairman.ideology;
+                    const isMigrant = !!speaker.mType; // 移民かどうか
+
+                    // 1. 平等主義：おしゃべりな奴（プレイヤー含む）を粛清
+                    if (id === "平等主義") {
+                        speaker.speechCount = (speaker.speechCount || 0) + 1;
+                        // 発言数が10を超え、かつランダム or 突出している場合
+                        if (speaker.speechCount > 10 && Math.random() < 0.3) {
+                            purgeMember(speaker, "共産党の平等を乱す多弁");
+                            return; // ループ中断
+                        }
+                        // 移民取り締まり(20%)
+                        if (isMigrant && Math.random() < 0.2) {
+                            purgeMember(speaker, "思想統制");
+                            return;
+                        }
+                    }
+
+                    // 2. 自由主義：不法移民発覚（50%）
+                    else if (id === "自由主義" && isMigrant) {
+                        if (Math.random() < 0.5) {
+                            purgeMember(speaker, "ビザ切れ（不法滞在）");
+                            return;
+                        }
+                    }
+
+                    // 3. 中道：形式的な取り締まり（10%）
+                    else if (id === "中道" && isMigrant) {
+                        if (Math.random() < 0.1) {
+                            purgeMember(speaker, "入管法の規定");
+                            return;
+                        }
+                    }
+
+                    // 4. 保守主義：移民には厳しい（70%）
+                    else if (id === "保守主義" && isMigrant) {
+                        if (Math.random() < 0.7) {
+                            purgeMember(speaker, "保守による排斥");
+                            return;
+                        }
+                    }
+
+                    // 5. 独裁者：移民が喋ったら即アウト
+                    else if (id === "独裁者" && isMigrant) {
+                        purgeMember(speaker, "独裁者の逆鱗");
+                        return;
+                    }
+
+                    // 6. 過激派：移民は即アウト + 鎖国
+                    else if (id === "過激派" && isMigrant) {
+                        purgeMember(speaker, "異分子排除");
+                        if (!sakoku) {
+                            sakoku = true;
+                            addBubble("システム", `⛔ 排除完了。これより鎖国する！`, "", false);
+                        }
+                        return;
+                    }
+                }
+
                 const body = generate(speaker.brain, lastTopic);
+                speaker.speechCount++;
+
 
                 learn(speaker.brain, body);
                 if (!speaker.isIndividual) {
@@ -1956,10 +2301,46 @@
                     maybeChairmanAction();
                 }
 
-                runConferenceLoop(body);
+                if (!chairman.name === data.userName) {
+                    processChairmanAction(speaker);
+                }
+
+
+                if (!is_vote) {
+                    if (!activeMembers.includes(speaker)) {
+                        runConferenceLoop("......消されたか。");
+                    } else {
+                        runConferenceLoop(body);
+                    }
+                }
+                updateStatusUI();
 
             }, 2000);
 
+        }
+
+        function updateStatusUI() {
+            const panel = document.getElementById("status-panel");
+            if (!panel) return;
+
+            // 表示条件：会議が実行中(conferenceRunning) かつ 議長(chairman)が存在する
+            if (conferenceRunning && chairman) {
+                panel.style.display = "block"; // 条件を満たせば表示
+
+                // 中身のデータ更新
+                document.getElementById("ui-chairman-name").innerText = chairman.name;
+                document.getElementById("ui-ideology").innerText = chairman.ideology;
+                document.getElementById("ui-approval").value = approvalRating;
+                document.getElementById("ui-approval-text").innerText = Math.floor(approvalRating) + "%";
+                document.getElementById("ui-sakoku").innerText = sakoku ? "⛔閉鎖" : "🔓稼働";
+
+                // 議長の色（派閥色など）をパネルの枠線にする演出
+                if (chairman.faction) {
+                    panel.style.border = `2px solid ${chairman.faction.color}`;
+                }
+            } else {
+                panel.style.display = "none"; // 会議停止中や選挙中は非表示
+            }
         }
         // AI議長 //
         function maybeChairmanAction() {
@@ -2030,7 +2411,7 @@
                 leaveFaction(member); // 既存関数を使う
             }
 
-            expelled.add(member);
+            expelled.push(member.name || member); // 名前を保存
             activeMembers = activeMembers.filter(m => m !== member);
 
             if (member.type === "user") playerAlive = false;
@@ -2063,7 +2444,7 @@
                     leaveFaction(v);
                 }
 
-                expelled.add(v);
+                expelled.push(v);
                 activeMembers = activeMembers.filter(m => m !== v);
 
                 if (v.type === "user") playerAlive = false;
@@ -2381,6 +2762,12 @@
             if (joinMatch) {
                 const factionName = joinMatch[1].trim();
                 userDeclaresFaction(factionName); // 自動で派閥に参加
+            }
+
+            const build = text.match(/(.+)を作成/);
+            if (build) {
+                const factionName = build[1].trim();
+                userDeclaresFactionbuild(factionName); // 自動で派閥から退出
             }
 
             const leaveMatch = text.match(/(.+)から脱退/); // 「〇〇から退出します」を正規表現で検出
