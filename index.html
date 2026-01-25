@@ -2794,34 +2794,28 @@
 
         // --- AIコア ---
         function learn(brain, text) {
-            if (!brain || !text || text.length < 2) return;
+            if (!brain || !text || text.length < 3) return; // 2文字ペアを作るので最低3文字必要
 
-            // 1. 無駄な改行や空白を整理して密度を上げる
+            // 無駄な空白削除
             const cleanText = text.replace(/\s+/g, " ").trim();
 
-            for (let i = 0; i < cleanText.length - 1; i++) {
-                let curr = cleanText[i];
-                let next = cleanText[i + 1];
+            // ★重要：2文字単位で学習する
+            for (let i = 0; i < cleanText.length - 2; i++) {
+                let curr = cleanText[i] + cleanText[i + 1]; // 現在の2文字 (例: "こん")
+                let next = cleanText[i + 2];              // 次の1文字 (例: "に")
 
                 if (!brain[curr]) {
                     brain[curr] = [];
                 }
 
-                // --- 賢く面白くするための工夫 ---
-                // 同じ「文字の繋がり」を覚えすぎないように制限（多様性の維持）
-                // これにより「ですよですよですよ…」のようなループを学習段階で防ぐ
+                // 重複制限（2文字単位なら少し緩めてもOK）
                 const linkCount = brain[curr].filter(c => c === next).length;
-
-                if (linkCount < 3) { // 同じペアは3回までしか記憶しない
+                if (linkCount < 5) {
                     brain[curr].push(next);
                 }
 
-                // 💡 奇想天外ポイント：
-                // 稀に（5%の確率）、文字を飛ばして学習することで「思考の飛躍」を仕込む
-                if (Math.random() < 0.05 && i < cleanText.length - 2) {
-                    let jumpNext = cleanText[i + 2];
-                    brain[curr].push(jumpNext);
-                }
+                // ★「思考の飛躍（文字飛ばし）」は削除しました。
+                // 日本語生成において、文字単位でのスキップはノイズにしかなりません。
             }
         }
 
@@ -2858,48 +2852,61 @@
             let keys = Object.keys(targetBrain);
             if (keys.length === 0) return "......";
 
-            // --- 開始文字の制限を解除（カオスを許容） ---
-            let startChar = "";
-            if (input && input.length > 0 && Math.random() < 0.7) { // 繋がりやすさを優先
-                const validChars = input.split('').filter(c => targetBrain[c]);
-                if (validChars.length > 0) {
-                    startChar = validChars[Math.floor(Math.random() * validChars.length)];
+            // --- 開始文字の選定 ---
+            let curr = "";
+
+            // 入力から有効な「2文字ペア」を探す
+            if (input && input.length >= 2) {
+                // 入力文の中に、脳内にあるペアが存在するか探す
+                const potentialStarts = [];
+                for (let i = 0; i < input.length - 1; i++) {
+                    let pair = input[i] + input[i + 1];
+                    if (targetBrain[pair]) potentialStarts.push(pair);
+                }
+
+                if (potentialStarts.length > 0) {
+                    curr = potentialStarts[Math.floor(Math.random() * potentialStarts.length)];
                 }
             }
-            if (!startChar) startChar = keys[Math.floor(Math.random() * keys.length)];
 
-            let curr = startChar;
-            let res = "";
+            // 見つからなければランダムなペアから開始
+            if (!curr) curr = keys[Math.floor(Math.random() * keys.length)];
+
+            let res = curr; // 最初の2文字
 
             // 文章生成
-            for (let i = 0; i < 20; i++) {
-                res += curr;
+            for (let i = 0; i < 30; i++) { // 2文字単位だと少し長めの方が安定する
                 let nexts = targetBrain[curr];
-                if (!nexts) break;
-                curr = nexts[Math.floor(Math.random() * nexts.length)];
-                if ("。！？".includes(curr) && res.length > 5) { res += curr; break; }
+                if (!nexts || nexts.length === 0) break;
+
+                let nextChar = nexts[Math.floor(Math.random() * nexts.length)];
+                res += nextChar;
+
+                // 次のキーを作る（現在の2文字目の文字 + 新しい文字）
+                // 例: curr="こん", next="に" -> 新curr="んに"
+                curr = curr.charAt(1) + nextChar;
+
+                // 句読点で終了判定（少し確率をいじるのも手）
+                if ("。！？\n".includes(nextChar) && res.length > 10) {
+                    break;
+                }
             }
 
-            // --- 暴言を「文章の一部」として注入する ---
+            // --- 既存の暴言・口癖処理（そのまま） ---
             if (speaker?.faction && targetMember) {
+                /* ...元のコードのまま... */
                 const isEnemy = !targetMember.faction || targetMember.faction.name !== speaker.faction.name;
-                if (isEnemy && Math.random() < 0.5) { // 50%で攻撃的になる
+                if (isEnemy && Math.random() < 0.5) {
                     const slurs = ["殺すぞ", "死ねよ", "ゴミめ", "消え失せろ", "の分際で"];
-                    // 語尾にくっつける（句読点があれば消す）
                     res = res.replace(/[。！？\n]$/, "") + slurs[Math.floor(Math.random() * slurs.length)];
                 }
             }
-
-            // 口癖も合体させる
             if (speaker?.fav && Math.random() < 0.4) {
                 res = res.replace(/[。！？]$/, "") + speaker.fav;
             }
 
-            // ★重要：オブジェクトではなく「文字列」を返す
-            // これにより、呼び出し側でこの「汚い言葉」もまるごと学習されるようになる
             return res || "......";
         }
-
 
         // --- データ管理 ---
         function saveData() {
