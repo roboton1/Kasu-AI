@@ -1195,15 +1195,13 @@
                     false
                 );
                 // 当選者(winner)の名前を使って、activeMembersからオブジェクトを探す
-                const winnerObj = activeMembers.find(m => m.name === winner);
-
+                const winnerObj = activeMembers.find(m => m.name.trim() === winner.trim());
                 if (winnerObj) {
                     // 🚩 ここで chairman を確実に更新する
-                    chairman = winnerObj;
                     is_vote = false;
 
+                    chairman = winnerObj;
 
-                    // 🚩 議長が自分(プレイヤー)かどうかで処理を分ける
                     if (chairman.name === data.userName) {
                         addBubble("システム", "🎉 あなたが新議長に選出されました！", "", false);
                         if (typeof openChairmanPanel === 'function') openChairmanPanel();
@@ -1211,13 +1209,14 @@
                         addBubble("システム", `📜 新議長に ${chairman.name} が就任しました。`, chairman.image, false);
                     }
 
+                    appointVice();
+                    if (typeof startChairmanTerm === 'function') startChairmanTerm();
+
                     // 🚩 議長がセットされた「後」に副議長を決める
                     approvalRating = 50;
 
-                    appointVice();
 
                     // 任期開始処理など
-                    if (typeof startChairmanTerm === 'function') startChairmanTerm();
                     setTimeout(() => {
                         const firstSpeaker = activeMembers[Math.floor(Math.random() * activeMembers.length)];
                         const starterText = `${chairmanTitle}の ${chairman.name} が決まったな。会議を再開しよう。`;
@@ -1229,10 +1228,17 @@
                     return;
 
                 } else {
-                    // 万が一、当選者が activeMembers に見つからなかった場合
-                    console.error("エラー: 当選者データが見つかりません。");
-                    addBubble("システム", "⚠️ 選挙に不備がありました。再選挙を行います。", "", false);
-                    startElection();
+                    // 🚩 ここが実行されている原因への対策
+                    console.error("エラー: 当選者データが見つかりません。名前:", winner);
+
+                    // 対策1: もし当選者がいなければ、とりあえず生き残っている中から得票1位を再セット
+                    if (activeMembers.length > 0) {
+                        addBubble("システム", "⚠️ 当選者が不在のため、次点候補を繰り上げます。", "", false);
+                        chairman = activeMembers[0]; // 暫定
+                        startElection(); // もしくは選挙をやり直す
+                    } else {
+                        addBubble("システム", "💀 生存者がいないため、全滅しました...", "", false);
+                    }
                 }
 
             }
@@ -1448,6 +1454,7 @@
             activeMembers.push(newMember);
             addBubble("システム", `✈️ [${newMember.ideology}] の ${name} (${mType}) が入国しました。`, "", false);
             renderCheckboxes(activeMembers);
+
         }
 
         function memberDeparture() {
