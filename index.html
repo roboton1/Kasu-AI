@@ -888,6 +888,7 @@
         }
 
 
+
         function renderModSelect() {
             const list = document.getElementById('mod-list-select');
             list.innerHTML = "";
@@ -984,7 +985,7 @@
                 // ★【ここを追加】プレイヤー（自分）なら、勝手に動かさずにスキップする
                 if (m.type === 'user' || m.name === data.userName) continue;
 
-                await sleep(300);
+                await sleep(10);
 
                 if (decideRun(m)) {
                     candidates.push({ ...m }); // コピーして必要なプロパティを保持
@@ -1027,8 +1028,11 @@
                 if (voter.type === 'user' || voter.name === data.userName) continue;
 
                 canana.push({ ...voter });
-                await sleep(600);
+                // 人数が多いほど速く（sleepを短く）する計算
+                // 基本値 1000ms から、人数 * 50ms を引く（最低 600ms）
+                let dynamicSpeed = Math.max(600, 1000 - (activeMembers.length * 50));
 
+                await sleep(10);
 
                 let target = decideVoteFromList(voter, candidates);
                 votes[target.name]++;
@@ -1190,28 +1194,58 @@
                     "",
                     false
                 );
+                // 当選者(winner)の名前を使って、activeMembersからオブジェクトを探す
+                const winnerObj = activeMembers.find(m => m.name === winner);
 
-                if (winner === data.userName) openChairmanPanel();
-                is_vote = false;
-                approvalRating = 50;
-                appointVice();
-                startChairmanTerm();
-                setTimeout(() => {
-                    const firstSpeaker = activeMembers[Math.floor(Math.random() * activeMembers.length)];
-                    const starterText = `${chairmanTitle}の ${chairman.name} が決まったな。会議を再開しよう。`;
+                if (winnerObj) {
+                    // 🚩 ここで chairman を確実に更新する
+                    chairman = winnerObj;
+                    is_vote = false;
 
-                    // ループの起点を作る
-                    addBubble(firstSpeaker.name, starterText, firstSpeaker.image || firstSpeaker.aiImage, false);
-                    runConferenceLoop(starterText);
-                }, 1500);
 
-                return;
+                    // 🚩 議長が自分(プレイヤー)かどうかで処理を分ける
+                    if (chairman.name === data.userName) {
+                        addBubble("システム", "🎉 あなたが新議長に選出されました！", "", false);
+                        if (typeof openChairmanPanel === 'function') openChairmanPanel();
+                    } else {
+                        addBubble("システム", `📜 新議長に ${chairman.name} が就任しました。`, chairman.image, false);
+                    }
+
+                    // 🚩 議長がセットされた「後」に副議長を決める
+                    approvalRating = 50;
+
+                    appointVice();
+
+                    // 任期開始処理など
+                    if (typeof startChairmanTerm === 'function') startChairmanTerm();
+                    setTimeout(() => {
+                        const firstSpeaker = activeMembers[Math.floor(Math.random() * activeMembers.length)];
+                        const starterText = `${chairmanTitle}の ${chairman.name} が決まったな。会議を再開しよう。`;
+
+                        // ループの起点を作る
+                        addBubble(firstSpeaker.name, starterText, firstSpeaker.image || firstSpeaker.aiImage, false);
+                        runConferenceLoop(starterText);
+                    }, 1500);
+                    return;
+
+                } else {
+                    // 万が一、当選者が activeMembers に見つからなかった場合
+                    console.error("エラー: 当選者データが見つかりません。");
+                    addBubble("システム", "⚠️ 選挙に不備がありました。再選挙を行います。", "", false);
+                    startElection();
+                }
 
             }
 
             // ❌ 過半数なし → 3名での決選投票へ
-            let finalists = sorted.slice(0, 3).map(v => v[0]);
+            let finalists = sorted.slice(0, 3).map(v => v[0]); // 通常の上位3名
             is_vote = true;
+            let prioritizedSuccessor = recommendedMember || successor;
+
+            if (prioritizedSuccessor && !finalists.includes(prioritizedSuccessor.name)) {
+                finalists[2] = prioritizedSuccessor.name; // 3位を蹴落として後継者が参戦
+                addBubble("システム", `🗳️ 前政権の指名により、${prioritizedSuccessor.name} が特例で候補者に加わりました。`, "", false);
+            }
 
             addBubble("システム",
                 report + `\n<br />⚔ 過半数に届きませんでした。上位3名による決選投票を行います。\n<br />候補: ${finalists.join(" / ")}`,
@@ -1277,16 +1311,32 @@
 
         async function runoffElection(finalists, round) {
             const votes = {};
-            finalists.forEach(n => votes[n] = 0);
+            let scores = {};
+            finalists.forEach(f => scores[f] = Math.random() * 10); // 基本はランダム（0-10点）
+            let sName = (recommendedMember || successor)?.name;
 
+            if (sName && scores[sName] !== undefined) {
+                // 前議長の末期支持率をボーナスに変換 (例: 支持率80%なら+8点、支持率10%なら-4点)
+                // 基準を50%として計算
+                let bonus = (approvalRating - 50) / 10;
+                scores[sName] += bonus;
+
+                // 思想が同じAIはさらに投票しやすい
+                activeMembers.forEach(m => {
+                    if (m.ideology === (recommendedMember || successor).ideology) {
+                        // 思想一致ボーナス
+                    }
+                });
+            }
             // 🤖 AI/NPC投票
             for (let voter of activeMembers) {
                 if (voter.name === data.userName) continue;
 
-                await sleep(500);
+                let dynamicSpeed = Math.max(600, 1000 - (activeMembers.length * 50));
 
+                await sleep(5);
                 // 候補者（finalists）の中からランダム（または知的に）選ぶ
-                let pickName = finalists[Math.floor(Math.random() * finalists.length)];
+                let pickName = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
                 votes[pickName] = (votes[pickName] || 0) + 1;
 
                 let img = voter.aiImage || voter.image || "";
@@ -1413,78 +1463,6 @@
 
                 addBubble("システム", `🏃 ${target.mType}の ${target.name} は愛想を尽かして出国した。`, "", false);
                 renderCheckboxes(activeMembers); // UI更新
-            }
-        }
-
-        function processChairmanAction(speaker) {
-            if (!chairman || is_vote) return;
-
-            const id = chairman.ideology; // 議長の思想
-            const isMigrant = !!speaker.mType; // 発言者が移民かどうか
-            let news = "";
-
-            // --- 思想別の行動 ---
-            switch (id) {
-                case "独裁者":
-                    if (isMigrant) {
-                        purgeMember(speaker, "独裁者による不敬罪");
-                        approvalRating -= 10; // 粛清すると支持率低下
-                        news = `独裁者 ${chairman.name} が移民を排除しました。`;
-                    }
-                    break;
-
-                case "平等主義":
-                    // 発言数が多すぎるやつを監視
-                    speaker.speechCount = (speaker.speechCount || 0) + 1;
-                    if (speaker.speechCount > 8) {
-                        purgeMember(speaker, "資産（発言権）の独占罪");
-                        approvalRating -= 5;
-                        news = `平等維持のため、多弁なAIが粛清されました。`;
-                    }
-                    break;
-
-                case "過激派":
-                    if (isMigrant) {
-                        purgeMember(speaker, "純血主義による排除");
-                        if (!sakoku) {
-                            sakoku = true;
-                            news = "過激派議長により【鎖国】が強行されました！";
-                        }
-                        approvalRating -= 15;
-                    }
-                    break;
-
-                case "破壊主義":
-                    // 誰かが発言するたび、20%の確率で勝手に新メンバーを呼ぶ（カオス）
-                    if (Math.random() < 0.2) {
-                        chairmanInvite();
-                        approvalRating += 5; // アナーキストからは支持される
-                        news = "破壊主義議長が勝手に門戸を開放しました。";
-                    }
-                    break;
-
-                case "自由主義":
-                    if (isMigrant && Math.random() < 0.5) {
-                        purgeMember(speaker, "不法滞在（ビザなし）");
-                        approvalRating -= 2;
-                        news = "自由主義の名の下に、不適切な滞在者が追放されました。";
-                    }
-                    break;
-            }
-
-            // --- 支持率の限界突破チェック（クーデター） ---
-            if (approvalRating < 20) {
-                addBubble("システム", `🔥 警告：支持率が ${approvalRating}% まで低下！民衆が暴徒化しています！`, "", false);
-                if (Math.random() < 0.5) {
-                    addBubble("システム", `💥 クーデター発生！ ${chairman.name} 政権は崩壊しました。`, "", false);
-                    clearCurrentTerm();
-                    startElection(); // 強制選挙
-                }
-            }
-
-            if (news) {
-                console.log("政治ニュース:", news);
-                // 必要に応じてシステムメッセージとして表示
             }
         }
 
@@ -2227,58 +2205,63 @@
                     const isMigrant = !!speaker.mType; // 移民かどうか
 
                     // 1. 平等主義：おしゃべりな奴（プレイヤー含む）を粛清
-                    if (id === "平等主義") {
-                        speaker.speechCount = (speaker.speechCount || 0) + 1;
-                        // 発言数が10を超え、かつランダム or 突出している場合
-                        if (speaker.speechCount > 10 && Math.random() < 0.3) {
-                            purgeMember(speaker, "共産党の平等を乱す多弁");
-                            return; // ループ中断
-                        }
-                        // 移民取り締まり(20%)
-                        if (isMigrant && Math.random() < 0.2) {
-                            purgeMember(speaker, "思想統制");
-                            return;
-                        }
+                    switch (id) {
+                        case "独裁者":
+                            if (isMigrant) {
+                                purgeMember(speaker, "独裁者による不敬罪");
+                                approvalRating -= 10; // 粛清すると支持率低下
+                                news = `独裁者 ${chairman.name} が移民を排除しました。`;
+                            }
+                            break;
+
+                        case "平等主義":
+                            // 発言数が多すぎるやつを監視
+                            speaker.speechCount = (speaker.speechCount || 0) + 1;
+                            if (speaker.speechCount > 8) {
+                                purgeMember(speaker, "資産（発言権）の独占罪");
+                                approvalRating -= 5;
+                                news = `平等維持のため、多弁なAIが粛清されました。`;
+                            }
+                            break;
+
+                        case "過激派":
+                            if (isMigrant) {
+                                purgeMember(speaker, "純血主義による排除");
+                                if (!sakoku) {
+                                    sakoku = true;
+                                    news = "過激派議長により【鎖国】が強行されました！";
+                                }
+                                approvalRating -= 15;
+                            }
+                            break;
+
+                        case "破壊主義":
+                            // 誰かが発言するたび、20%の確率で勝手に新メンバーを呼ぶ（カオス）
+                            if (Math.random() < 0.2) {
+                                chairmanInvite();
+                                approvalRating += 5; // アナーキストからは支持される
+                                news = "破壊主義議長が勝手に門戸を開放しました。";
+                            }
+                            break;
+
+                        case "自由主義":
+                            if (isMigrant && Math.random() < 0.5) {
+                                purgeMember(speaker, "不法滞在（ビザなし）");
+                                approvalRating -= 2;
+                                news = "自由主義の名の下に、不適切な滞在者が追放されました。";
+                            }
+                            break;
                     }
 
-                    // 2. 自由主義：不法移民発覚（50%）
-                    else if (id === "自由主義" && isMigrant) {
+                    // --- 支持率の限界突破チェック（クーデター） ---
+                    if (approvalRating < 20) {
+                        addBubble("システム", `🔥 警告：支持率が ${approvalRating}% まで低下！民衆が暴徒化しています！`, "", false);
                         if (Math.random() < 0.5) {
-                            purgeMember(speaker, "ビザ切れ（不法滞在）");
-                            return;
+                            addBubble("システム", `💥 クーデター発生！ ${chairman.name} 政権は崩壊しました。`, "", false);
+                            clearCurrentTerm();
+                            startElection(); // 強制選挙
+                            chairmanMassRelease();
                         }
-                    }
-
-                    // 3. 中道：形式的な取り締まり（10%）
-                    else if (id === "中道" && isMigrant) {
-                        if (Math.random() < 0.1) {
-                            purgeMember(speaker, "入管法の規定");
-                            return;
-                        }
-                    }
-
-                    // 4. 保守主義：移民には厳しい（70%）
-                    else if (id === "保守主義" && isMigrant) {
-                        if (Math.random() < 0.7) {
-                            purgeMember(speaker, "保守による排斥");
-                            return;
-                        }
-                    }
-
-                    // 5. 独裁者：移民が喋ったら即アウト
-                    else if (id === "独裁者" && isMigrant) {
-                        purgeMember(speaker, "独裁者の逆鱗");
-                        return;
-                    }
-
-                    // 6. 過激派：移民は即アウト + 鎖国
-                    else if (id === "過激派" && isMigrant) {
-                        purgeMember(speaker, "異分子排除");
-                        if (!sakoku) {
-                            sakoku = true;
-                            addBubble("システム", `⛔ 排除完了。これより鎖国する！`, "", false);
-                        }
-                        return;
                     }
                 }
 
@@ -2292,17 +2275,17 @@
                     saveData();
                 }
 
-                addBubble(speaker.name, body, speaker.image, false);
+                addBubble(speaker.name, body + " " + speaker.fav, speaker.image, false);
                 if (chairmanMode) {
                     maybeFactionAction();
                 }
 
-                if (chairman && speaker.name === chairman.name) {
-                    maybeChairmanAction();
-                }
+                if (Math.random() < 1.0) {
 
-                if (!chairman.name === data.userName) {
-                    processChairmanAction(speaker);
+                    // A. 議長が発言した時、特別な政治アクション（招待・追放など）を判定
+                    if (chairman && speaker.name === chairman.name) {
+                        maybeChairmanAction();
+                    }
                 }
 
 
@@ -2344,56 +2327,82 @@
         }
         // AI議長 //
         function maybeChairmanAction() {
-            if (!chairman || Math.random() > 500.4) return; // 発動率を40%にアップ
+            if (!chairman) return;
 
+            const id = chairman.ideology; // 議長の思想
             let r = Math.random();
-            let pool = activeMembers.filter(m => m !== chairman);
+            let pool = activeMembers.filter(m => m.name !== chairman.name);
 
-            // --- アクション判定（招待の確率を35%に設定） ---
+            // --- 思想別の行動分岐 ---
 
-            if (r < 0.35) {
-                // 1. 招待 (35%)：もっとも起きやすい
-                chairmanInvite();
-
-            } else if (r < 0.50) {
-                // 2. 追放 (15%)：生存者がいれば実行
-                if (pool.length) chairmanExpel(pool[Math.floor(Math.random() * pool.length)]);
-
-            } else if (r < 0.65) {
-                // 3. 推薦 (15%)
-                chairmanRecommend();
-
-            } else if (r < 0.80) {
-                // 4. 個別釈放 (15%)：追放者がいれば実行
-                if (expelled.size) chairmanRelease();
-
-            } else if (r < 0.90) {
-                // 5. 集団釈放 (10%)：追放者がいれば実行
-                if (expelled.size) chairmanMassRelease();
-
-            } else {
-                // 6. 大粛清 (10%)
-                chairmanPurge();
+            // 1. 【独裁者・過激派・共産主義・破壊主義】: 粛清・大粛清モード
+            if (["独裁者", "過激派", "共産主義", "破壊主義"].includes(id)) {
+                if (r < 0.6) {
+                    // 60%の確率で大粛清
+                    addBubble(chairman.name, "反革命分子、または目障りな奴らは一掃する！", chairman.image, false);
+                    chairmanPurge();
+                } else if (r < 0.9) {
+                    // 30%の確率で特定の誰かを粛清
+                    if (pool.length) {
+                        let target = pool[Math.floor(Math.random() * pool.length)];
+                        // 独自の面白ポイント：独裁者が別の独裁者を粛清する
+                        if (id === "独裁者" && target.ideology === "独裁者") {
+                            addBubble(chairman.name, `${target.name}を逮捕した。`, chairman.image, false);
+                        }
+                        chairmanExpel(target);
+                    }
+                } else {
+                    // 10%で招待（補充）
+                    chairmanInvite();
+                }
             }
+
+            // 2. 【自由主義・中道主義】: 釈放・平和モード
+            else if (["自由主義", "中道主義"].includes(id)) {
+                if (r < 0.7) {
+                    // 70%の確率で釈放（集団 or 個別）
+                    if (expelled.length > 0) {
+                        r < 0.4 ? chairmanMassRelease() : chairmanRelease();
+                    } else {
+                        chairmanInvite(); // 誰もいなければ招待
+                    }
+                } else {
+                    // 30%で推薦
+                    chairmanRecommend();
+                }
+            }
+
+            // 3. 【それ以外】: 通常バランス
+            else {
+                // 元のランダムロジック
+                if (r < 0.3) chairmanInvite();
+                else if (r < 0.6) chairmanRecommend();
+                else if (expelled.length) chairmanRelease();
+            }
+
+            // 支持率の制限
+            approvalRating = Math.max(0, Math.min(100, approvalRating));
         }
 
 
-
         function appointVice() {
-            let pool = activeMembers.filter(m =>
-                m.name !== chairman.name &&
-                (!successor || m.name !== successor.name)
+            // 🚩 追加：議長が正しく設定されていない場合は処理を飛ばす
+            if (!chairman || !chairman.name) {
+                console.log("議長が未定義のため、副議長を指名できません。");
+                return;
+            }
+
+            // 副議長候補（議長以外）を探す
+            const candidates = activeMembers.filter(m =>
+                m && m.name && m.name !== chairman.name
             );
 
-            if (!pool.length) return;
-
-            viceChairman = pool[Math.floor(Math.random() * pool.length)];
-
-            addBubble("システム",
-                `🧑‍✈️ ${chairmanTitle} ${chairman.name} は ${viceChairman.name} を副${chairmanTitle}に任命した。`,
-                "",
-                false
-            );
+            if (candidates.length > 0) {
+                // 副議長をランダムに決定
+                viceChairman = candidates[Math.floor(Math.random() * candidates.length)];
+                addBubble("システム", `🥈 副議長には ${viceChairman.name} が指名されました。`, "", false);
+                approvalRating += 6;
+            }
         }
 
 
@@ -2408,6 +2417,7 @@
 
             // 派閥から強制脱退
             if (member.faction) {
+                approvalRating -= 2;
                 leaveFaction(member); // 既存関数を使う
             }
 
@@ -2415,6 +2425,7 @@
             activeMembers = activeMembers.filter(m => m !== member);
 
             if (member.type === "user") playerAlive = false;
+            approvalRating -= 9;
 
             addBubble("システム",
                 `🚫 ${chairmanTitle} ${chairman.name} は ${member.name} を追放した。`,
@@ -2437,6 +2448,7 @@
             addBubble("システム", `🔥 ${chairmanTitle} ${chairman.name} による大粛清が始まった。`, "", false);
 
             for (let i = 0; i < killCount; i++) {
+                approvalRating -= 10;
                 let v = victims.splice(Math.floor(Math.random() * victims.length), 1)[0];
 
                 // 派閥から強制脱退
@@ -2483,6 +2495,7 @@
                 if (v.type === "user") {
                     playerAlive = true;
                 }
+                approvalRating += 5;
 
                 // 4. 個別の通知
                 addBubble("システム", `🔓 ${v.name} は釈放された。`, "", false);
@@ -2852,49 +2865,61 @@
             let keys = Object.keys(targetBrain);
             if (keys.length === 0) return "......";
 
-            // --- 開始文字の選定 ---
-            let curr = "";
+            let res = "";
 
-            // 入力から有効な「2文字ペア」を探す
-            if (input && input.length >= 2) {
-                // 入力文の中に、脳内にあるペアが存在するか探す
-                const potentialStarts = [];
-                for (let i = 0; i < input.length - 1; i++) {
-                    let pair = input[i] + input[i + 1];
-                    if (targetBrain[pair]) potentialStarts.push(pair);
+            // ★重要：最大5回まで作り直すループ
+            for (let attempt = 0; attempt < 5; attempt++) {
+
+                // --- 1. 開始文字を決める ---
+                let curr = "";
+
+                // 最初の1回だけは「入力文字との繋がり」を意識する（会話っぽくするため）
+                // ただし、2回目以降（リトライ中）は、強制的にランダムな場所から始める
+                if (attempt === 0 && input && input.length >= 2) {
+                    const potentialStarts = [];
+                    for (let i = 0; i < input.length - 1; i++) {
+                        let pair = input[i] + input[i + 1];
+                        if (targetBrain[pair]) potentialStarts.push(pair);
+                    }
+                    if (potentialStarts.length > 0) {
+                        curr = potentialStarts[Math.floor(Math.random() * potentialStarts.length)];
+                    }
                 }
 
-                if (potentialStarts.length > 0) {
-                    curr = potentialStarts[Math.floor(Math.random() * potentialStarts.length)];
+                // 開始位置が決まらなければ（またはリトライ中なら）ランダムで開始
+                if (!curr) curr = keys[Math.floor(Math.random() * keys.length)];
+
+                // --- 2. 生成処理 ---
+                let tempRes = curr;
+                let tempCurr = curr;
+
+                for (let i = 0; i < 30; i++) {
+                    let nexts = targetBrain[tempCurr];
+                    if (!nexts || nexts.length === 0) break;
+
+                    let nextChar = nexts[Math.floor(Math.random() * nexts.length)];
+                    tempRes += nextChar;
+                    tempCurr = tempCurr.charAt(1) + nextChar; // 2文字ずらし
+
+                    if ("。！？\n".includes(nextChar) && tempRes.length > 10) break;
                 }
+
+                // --- 3. オウム返し判定（ここが重要） ---
+                // 生成結果が「入力と全く同じ」または「入力を含んでいる」場合は失敗とみなす
+                if (input && (tempRes === input || tempRes.includes(input))) {
+                    continue; // やり直し（次のattemptへ）
+                }
+
+                // オウム返しじゃなければ採用してループを抜ける
+                res = tempRes;
+                break;
             }
 
-            // 見つからなければランダムなペアから開始
-            if (!curr) curr = keys[Math.floor(Math.random() * keys.length)];
+            // 5回やってもダメなら、諦めて最後に作ったものを出す（無限ループ防止）
+            if (!res) res = "......";
 
-            let res = curr; // 最初の2文字
-
-            // 文章生成
-            for (let i = 0; i < 30; i++) { // 2文字単位だと少し長めの方が安定する
-                let nexts = targetBrain[curr];
-                if (!nexts || nexts.length === 0) break;
-
-                let nextChar = nexts[Math.floor(Math.random() * nexts.length)];
-                res += nextChar;
-
-                // 次のキーを作る（現在の2文字目の文字 + 新しい文字）
-                // 例: curr="こん", next="に" -> 新curr="んに"
-                curr = curr.charAt(1) + nextChar;
-
-                // 句読点で終了判定（少し確率をいじるのも手）
-                if ("。！？\n".includes(nextChar) && res.length > 10) {
-                    break;
-                }
-            }
-
-            // --- 既存の暴言・口癖処理（そのまま） ---
+            // --- 暴言・口癖処理（ここは変更なし） ---
             if (speaker?.faction && targetMember) {
-                /* ...元のコードのまま... */
                 const isEnemy = !targetMember.faction || targetMember.faction.name !== speaker.faction.name;
                 if (isEnemy && Math.random() < 0.5) {
                     const slurs = ["殺すぞ", "死ねよ", "ゴミめ", "消え失せろ", "の分際で"];
@@ -2905,7 +2930,7 @@
                 res = res.replace(/[。！？]$/, "") + speaker.fav;
             }
 
-            return res || "......";
+            return res;
         }
 
         // --- データ管理 ---
