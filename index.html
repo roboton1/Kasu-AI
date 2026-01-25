@@ -2712,16 +2712,20 @@
             if (!pool.length) return;
 
             let name = generateName(data.brain);
-            let avatar = `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(name)}`;
+            let types = ["入国者", "移民", "留学生"];
+            let mType = types[Math.floor(Math.random() * types.length)];
 
             let newMember = {
                 type: "ai",
+                mType: mType,
                 name,
-                image: avatar,
+                image: `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(name)}`,
                 brain: JSON.parse(JSON.stringify(data.brain)),
-                fav: "",
-                ng: "",
-                isIndividual: true
+                fav: (mType === "留学生") ? "（勉強中）" : "",
+                isIndividual: true,
+                // ★新入りにも思想を与える
+                ideology: getRandomIdeology(),
+                speechCount: 0
             };
 
             activeMembers.push(newMember);
