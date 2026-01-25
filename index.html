@@ -1312,27 +1312,37 @@
         async function runoffElection(finalists, round) {
             const votes = {};
             let scores = {};
-            finalists.forEach(f => scores[f] = Math.random() * 10); // 基本はランダム（0-10点）
-            let sName = (recommendedMember || successor)?.name;
-
-            if (sName && scores[sName] !== undefined) {
-                // 前議長の末期支持率をボーナスに変換 (例: 支持率80%なら+8点、支持率10%なら-4点)
-                // 基準を50%として計算
-                let bonus = (approvalRating - 50) / 10;
-                scores[sName] += bonus;
-
-                // 思想が同じAIはさらに投票しやすい
-                activeMembers.forEach(m => {
-                    if (m.ideology === (recommendedMember || successor).ideology) {
-                        // 思想一致ボーナス
-                    }
-                });
-            }
             // 🤖 AI/NPC投票
             for (let voter of activeMembers) {
                 if (voter.name === data.userName) continue;
+                if (voter.name === data.userName) continue;
 
-                let dynamicSpeed = Math.max(600, 1000 - (activeMembers.length * 50));
+                let scores = {};
+
+                // 候補者ごとにスコアを計算
+                finalists.forEach(fName => {
+                    scores[fName] = Math.random() * 5; // 基礎スコア
+
+                    const candidate = activeMembers.find(m => m.name === fName);
+                    if (candidate) {
+                        // ✅ 正しいスコープで計算
+                        // 1. 主義の一致ボーナス (+15点)
+                        if (voter.ideology === candidate.ideology) {
+                            scores[fName] += 15;
+                        }
+
+                        // 2. 派閥の一致ボーナス (+10点)
+                        if (voter.faction && candidate.faction && voter.faction.name === candidate.faction.name) {
+                            scores[fName] += 10;
+                        }
+
+                        // 3. 後継者・指名ボーナス
+                        if ((recommendedMember || successor)?.name === fName) {
+                            let bonus = (lastApproval - 50) / 5;
+                            scores[fName] += bonus;
+                        }
+                    }
+                });
 
                 await sleep(5);
                 // 候補者（finalists）の中からランダム（または知的に）選ぶ
@@ -1944,7 +1954,7 @@
                 const targets = expelledList.filter(m => selectedNames.includes(m.name));
 
                 targets.forEach(member => {
-                    if (expelled instanceof Set) expelled.delete(member);
+                    if (expelled instanceof Set) expelled.filter(member);
                     else {
                         const idx = expelled.indexOf(member);
                         if (idx > -1) expelled.splice(idx, 1);
@@ -2190,7 +2200,7 @@
                     addBubble("システム", "⚠ 参加者が不足しています。一部の人を釈放します。", "", false);
                     if (expelled.size > 0) {
                         let r = expelled.values().next().value;
-                        expelled.delete(r);
+                        expelled.filter(r);
                         activeMembers.push(r);
                         addBubble("システム", `✅ ${r.name} を釈放しました。`, "", false);
                         document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
@@ -2469,11 +2479,12 @@
         }
 
         function chairmanMassRelease() {
-            // 1. 釈放対象（追放者）がいるかチェック
-            if (!expelled || expelled.size === 0) return;
+            // 1. 釈放対象がいるかチェック（.length を使う！）
+            if (!expelled || expelled.length === 0) return;
 
-            let victims = Array.from(expelled); // 追放者リスト
-            // 釈放する人数を決定（例：追放者の50%、最低1人）
+            // victimsコピーを作成
+            let victims = [...expelled];
+            // 釈放する人数（50%）
             let releaseCount = Math.max(1, Math.floor(victims.length * 0.5));
 
             addBubble("システム",
@@ -2483,25 +2494,35 @@
             );
 
             for (let i = 0; i < releaseCount; i++) {
-                // ランダムに一人選ぶ
-                let v = victims.splice(Math.floor(Math.random() * victims.length), 1)[0];
+                if (victims.length === 0) break;
+
+                // ランダムに一人選ぶ (オブジェクトを取り出す)
+                let index = Math.floor(Math.random() * victims.length);
+                let v = victims.splice(index, 1)[0];
                 if (!v) continue;
 
-                // 2. 内部データの移動
-                expelled.delete(v);
-                activeMembers.push(v);
+                // ✅ 修正2: 名簿(expelled)からこの人を消す
+                // filterに "v" そのものを入れるのではなく、関数を入れる！
+                expelled = expelled.filter(member => member.name !== v.name);
+
+                // ✅ 修正3: 生存リスト(activeMembers)に戻す
+                // すでに中にいないかチェックしてから入れる（二重登録防止）
+                if (!activeMembers.find(m => m.name === v.name)) {
+                    activeMembers.push(v);
+                }
 
                 // 3. プレイヤー復帰判定
-                if (v.type === "user") {
+                if (v.name === data.userName) {
                     playerAlive = true;
                 }
-                approvalRating += 5;
 
-                // 4. 個別の通知
+                // 支持率アップ（上限100まで）
+                approvalRating = Math.min(100, approvalRating + 5);
+
                 addBubble("システム", `🔓 ${v.name} は釈放された。`, "", false);
             }
 
-            // 5. UI（人数表示）の更新
+            // 5. UI更新
             const headerTitle = document.getElementById('header-title');
             if (headerTitle) {
                 headerTitle.innerText = `会議中 (${activeMembers.length}名)`;
@@ -2731,7 +2752,7 @@
 
             // 実行処理
             if (expelled instanceof Set) {
-                expelled.delete(member);
+                expelled.filter(member);
             } else {
                 // 配列の場合の削除処理
                 const index = expelled.indexOf(member);
