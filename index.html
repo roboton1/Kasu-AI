@@ -497,6 +497,7 @@
         <label><input type="checkbox" id="chk-chairman" checked> 議長モード有効</label><br>
         タイトル: <input type="text" id="chairman-title" value="議長"><br>
         <label><input type="checkbox" id="issakoku">入国禁止</label><br>
+        <label><input type="checkbox" id="npc-skip">NPC選挙スキップ</label><br>
         <select id="election-mode">
             <option value="vote">選挙で決定</option>
             <option value="manual">ランダム（実験的）</option>
@@ -647,6 +648,7 @@
         let viceChairman = null;
         let successor = null;
         let chairmanTitle = "議長";
+        let lastApproval = 50;
         let factions = [];
         let deadFactions = [];
 
@@ -962,10 +964,9 @@
         async function startElection() {
             recordChairmanHistory();
             if (is_vote) return;
-            if (chairman = data.userName) {
+            if (chairman && chairman.name === data.userName) {
                 closeChairmanPanel();
                 closePanel();
-
             }
             is_vote = true;
             clearCurrentTerm();
@@ -985,13 +986,19 @@
                 // ★【ここを追加】プレイヤー（自分）なら、勝手に動かさずにスキップする
                 if (m.type === 'user' || m.name === data.userName) continue;
 
-                await sleep(10);
+                if (npcskip) {
+                    await sleep(10);
+                }
 
                 if (decideRun(m)) {
                     candidates.push({ ...m }); // コピーして必要なプロパティを保持
-                    addBubble(m.name, `私は${chairmanTitle}に立候補します。`, m.image || "", false);
+                    if (npcskip) {
+                        addBubble(m.name, `私は${chairmanTitle}に立候補します。`, m.image || "", false);
+                    }
                 } else {
-                    addBubble(m.name, `私は${chairmanTitle}に立候補しません。`, m.image || "", false);
+                    if (npcskip) {
+                        addBubble(m.name, `私は${chairmanTitle}に立候補しません。`, m.image || "", false);
+                    }
                 }
 
             }
@@ -1031,18 +1038,18 @@
                 // 人数が多いほど速く（sleepを短く）する計算
                 // 基本値 1000ms から、人数 * 50ms を引く（最低 600ms）
                 let dynamicSpeed = Math.max(600, 1000 - (activeMembers.length * 50));
-
-                await sleep(10);
-
                 let target = decideVoteFromList(voter, candidates);
                 votes[target.name]++;
                 let img = voter.aiImage || voter.image || "";
+                if (npcskip) {
+                    await sleep(10);
 
-                addBubble(voter.name,
-                    `私は ${target.name} に投票します。`,
-                    img,
-                    false
-                );
+                    addBubble(voter.name,
+                        `私は ${target.name} に投票します。`,
+                        img,
+                        false
+                    );
+                }
             }
 
             await sleep(500);
@@ -1196,74 +1203,72 @@
                 );
                 // 当選者(winner)の名前を使って、activeMembersからオブジェクトを探す
                 const winnerObj = activeMembers.find(m => m.name.trim() === winner.trim());
-                if (winnerObj) {
-                    // 🚩 ここで chairman を確実に更新する
-                    is_vote = false;
+                chairman = winnerObj;
 
-                    chairman = winnerObj;
-
-                    if (chairman.name === data.userName) {
-                        addBubble("システム", "🎉 あなたが新議長に選出されました！", "", false);
-                        if (typeof openChairmanPanel === 'function') openChairmanPanel();
-                    } else {
-                        addBubble("システム", `📜 新議長に ${chairman.name} が就任しました。`, chairman.image, false);
-                    }
-
-                    appointVice();
-                    if (typeof startChairmanTerm === 'function') startChairmanTerm();
-
-                    // 🚩 議長がセットされた「後」に副議長を決める
-                    approvalRating = 50;
-
-
-                    // 任期開始処理など
-                    setTimeout(() => {
-                        const firstSpeaker = activeMembers[Math.floor(Math.random() * activeMembers.length)];
-                        const starterText = `${chairmanTitle}の ${chairman.name} が決まったな。会議を再開しよう。`;
-
-                        // ループの起点を作る
-                        addBubble(firstSpeaker.name, starterText, firstSpeaker.image || firstSpeaker.aiImage, false);
-                        runConferenceLoop(starterText);
-                    }, 1500);
-                    return;
-
+                if (chairman.name === data.userName) {
+                    addBubble("システム", "🎉 あなたが新議長に選出されました！", "", false);
+                    if (typeof openChairmanPanel === 'function') openChairmanPanel();
                 } else {
-                    // 🚩 ここが実行されている原因への対策
-                    console.error("エラー: 当選者データが見つかりません。名前:", winner);
-
-                    // 対策1: もし当選者がいなければ、とりあえず生き残っている中から得票1位を再セット
-                    if (activeMembers.length > 0) {
-                        addBubble("システム", "⚠️ 当選者が不在のため、次点候補を繰り上げます。", "", false);
-                        chairman = activeMembers[0]; // 暫定
-                        startElection(); // もしくは選挙をやり直す
-                    } else {
-                        addBubble("システム", "💀 生存者がいないため、全滅しました...", "", false);
-                    }
+                    addBubble("システム", `📜 新議長に ${chairman.name} が就任しました。`, chairman.image, false);
                 }
 
+                appointVice();
+                if (typeof startChairmanTerm === 'function') startChairmanTerm();
+
+                // 🚩 議長がセットされた「後」に副議長を決める
+                approvalRating = 50;
+
+
+                // 任期開始処理など
+                setTimeout(() => {
+                    const firstSpeaker = activeMembers[Math.floor(Math.random() * activeMembers.length)];
+                    const starterText = `${chairmanTitle}の ${chairman.name} が決まったな。会議を再開しよう。`;
+
+                    // ループの起点を作る
+                    addBubble(firstSpeaker.name, starterText, firstSpeaker.image || firstSpeaker.aiImage, false);
+                    runConferenceLoop(starterText);
+                }, 1500);
+                return;
+
+            } else {
+                // 🚩 ここが実行されている原因への対策
+                console.error("エラー: 当選者データが見つかりません。名前:", winner);
+
+                // 対策1: もし当選者がいなければ、とりあえず生き残っている中から得票1位を再セット
+                if (activeMembers.length > 0) {
+                    addBubble("システム", "⚠️ 当選者が不在のため、次点候補を繰り上げます。", "", false);
+                    chairman = activeMembers[0]; // 暫定
+                    startElection(); // もしくは選挙をやり直す
+                } else {
+                    addBubble("システム", "💀 生存者がいないため、全滅しました...", "", false);
+                }
             }
 
-            // ❌ 過半数なし → 3名での決選投票へ
-            let finalists = sorted.slice(0, 3).map(v => v[0]); // 通常の上位3名
-            is_vote = true;
-            let prioritizedSuccessor = recommendedMember || successor;
-
-            if (prioritizedSuccessor && !finalists.includes(prioritizedSuccessor.name)) {
-                finalists[2] = prioritizedSuccessor.name; // 3位を蹴落として後継者が参戦
-                addBubble("システム", `🗳️ 前政権の指名により、${prioritizedSuccessor.name} が特例で候補者に加わりました。`, "", false);
-            }
-
-            addBubble("システム",
-                report + `\n<br />⚔ 過半数に届きませんでした。上位3名による決選投票を行います。\n<br />候補: ${finalists.join(" / ")}`,
-                "",
-                false
-            );
-
-            runoffElection(finalists, round + 1);
         }
 
+        // ❌ 過半数なし → 3名での決選投票へ
+        let finalists = sorted.slice(0, 3).map(v => v[0]); // 通常の上位3名
+        is_vote = true;
+        let prioritizedSuccessor = recommendedMember || successor;
+
+        if (prioritizedSuccessor && !finalists.includes(prioritizedSuccessor.name)) {
+            finalists[2] = prioritizedSuccessor.name; // 3位を蹴落として後継者が参戦
+            addBubble("システム", `🗳️ 前政権の指名により、${prioritizedSuccessor.name} が特例で候補者に加わりました。`, "", false);
+        }
+
+        addBubble("システム",
+            report + `\n<br />⚔ 過半数に届きませんでした。上位3名による決選投票を行います。\n<br />候補: ${finalists.join(" / ")}`,
+            "",
+            false
+        );
+
+        runoffElection(finalists, round + 1);
+
         function recordChairmanHistory() {
-            if (!chairman) return;
+            if (!chairman || typeof chairman !== 'object' || !chairman.name) {
+                console.warn("記録対象の議長が存在しないため、スキップしました。");
+                return;
+            }
 
             const record = {
                 name: chairman.name,
@@ -1276,13 +1281,12 @@
                 date: new Date().toLocaleTimeString()
             };
 
-            chairmanHistory.unshift(record); // 新しい順に保存（先頭に追加）
-            if (chairmanHistory.length > 10) chairmanHistory.pop(); // 直近10名まで保存
+            istory.unshift(record); // 新しい順に保存（先頭に追加）
         }
 
         // 終了理由を判定するヘルパー
         function getTermEndReason() {
-            if (approvalRating < 20) return "クーデター";
+            if (approvalRating < 20) return "辞任";
             if (!activeMembers.includes(chairman)) return "粛清・消失";
             return "任期満了";
         }
@@ -1316,6 +1320,7 @@
         }
 
         async function runoffElection(finalists, round) {
+            lastApproval = approvalRating;
             const votes = {};
             let scores = {};
             // 🤖 AI/NPC投票
@@ -1350,13 +1355,16 @@
                     }
                 });
 
-                await sleep(5);
-                // 候補者（finalists）の中からランダム（または知的に）選ぶ
+                if (npcskip) {
+
+                    await sleep(5);
+                    // 候補者（finalists）の中からランダム（または知的に）選ぶ
+
+                    let img = voter.aiImage || voter.image || "";
+                    addBubble(voter.name, `私は ${pickName} に投票します。`, img, false);
+                }
                 let pickName = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
                 votes[pickName] = (votes[pickName] || 0) + 1;
-
-                let img = voter.aiImage || voter.image || "";
-                addBubble(voter.name, `私は ${pickName} に投票します。`, img, false);
             }
 
             // 👤 プレイヤー投票
@@ -2138,6 +2146,12 @@
 
             runConferenceLoop("");
         }
+        async function groksays(hatugen) {
+            const syabe = await puter.ai.chat(hatugen, {
+                model: "x-ai/grok-4.1-fast",
+            });
+            return syabe;
+        }
 
 
         function stopConference() {
@@ -2235,7 +2249,7 @@
                             // 発言数が多すぎるやつを監視
                             speaker.speechCount = (speaker.speechCount || 0) + 1;
                             if (speaker.speechCount > 8) {
-                                purgeMember(speaker, "資産（発言権）の独占罪");
+                                purgeMember(speaker, "発言権の独占罪");
                                 approvalRating -= 5;
                                 news = `平等維持のため、多弁なAIが粛清されました。`;
                             }
@@ -2273,17 +2287,39 @@
                     // --- 支持率の限界突破チェック（クーデター） ---
                     if (approvalRating < 20) {
                         addBubble("システム", `🔥 警告：支持率が ${approvalRating}% まで低下！民衆が暴徒化しています！`, "", false);
-                        if (Math.random() < 0.5) {
-                            addBubble("システム", `💥 クーデター発生！ ${chairman.name} 政権は崩壊しました。`, "", false);
+
+                        if (Math.random() < 0.1) {
+                            // 1. 崩壊する議長の名前を一時保存（undefined対策）
+                            const fallenName = chairman ? chairman.name : "不明な議長";
+
+                            addBubble("システム", `💥 クーデター発生！ ${fallenName} 政権は崩壊しました。`, "", false);
+                            recordChairmanHistory();
+                            chairman = null
+
+                            // 2. 履歴に記録するなら「完全に消す前」に実行
+                            // ※ recordChairmanHistory(fallenName, "政権崩壊") のような関数があればここで呼ぶ
+
+                            // 3. 全員釈放（議長が消える前に実行するか、関数内の引数で名前を渡す）
+                            // ※ 議長がいなくても動くように修正した chairmanMassRelease を使う
+                            if (Math.random() < 0.2) {
+                                chairmanMassRelease();
+                            }
+
+                            // 4. ここで初めて現在の任期データをクリアする
                             clearCurrentTerm();
-                            startElection(); // 強制選挙
-                            chairmanMassRelease();
+
+                            startElection();
                         }
                     }
                 }
 
+
                 const body = generate(speaker.brain, lastTopic);
                 speaker.speechCount++;
+
+                addBubble("システム", groksays(body), "", false
+                );
+
 
 
                 learn(speaker.brain, body);
@@ -2313,7 +2349,22 @@
                         runConferenceLoop(body);
                     }
                 }
-                updateStatusUI();
+
+                let drift = Math.random() - 0.5;
+
+                // 🚩 微調整：思想による「補正」を少しだけ残すとゲーム性が増します
+                if (speaker.ideology === chairman.ideology) {
+                    drift += 0.1; // 仲間が喋ると少しだけプラスに振れやすい
+                } else {
+                    drift -= 0.1; // 反対派が喋ると少しだけマイナスに振れやすい
+                }
+
+                // 支持率に反映（0～100の範囲を維持）
+                approvalRating += drift;
+                approvalRating = Math.max(0, Math.min(100, approvalRating));
+
+                // 小数点第1位まで表示するようにUI更新（数値が細かく動くのを見せるため）
+                if (typeof updateStatusUI === 'function') updateStatusUI();
 
             }, 2000);
 
@@ -2771,6 +2822,7 @@
             }
 
             activeMembers.push(member);
+            approvalRating += 10;
 
             if (member.type === "user") playerAlive = true;
 
@@ -2983,6 +3035,7 @@
 
                 // ★ dataオブジェクトに設定をまとめる
                 data.chairmanMode = document.getElementById("chk-chairman").checked;
+                data.npcskip = document.getElementById("npc-skip").checked;
                 data.chairmanTitle = document.getElementById("chairman-title").value;
                 data.electionMode = document.getElementById("election-mode").value;
                 data.sakoku = document.getElementById("issakoku").checked;
@@ -3018,6 +3071,8 @@
 
                 // 議長設定の復元
                 document.getElementById("chk-chairman").checked = data.chairmanMode || false;
+                data.npcskip = document.getElementById("npc-skip").checked = data.npcskip || false;
+                data.sakoku = document.getElementById("issakoku").checked = data.sakoku || false;
                 document.getElementById("chairman-title").value = data.chairmanTitle || "議長";
                 document.getElementById("election-mode").value = data.electionMode || "random";
 
