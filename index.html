@@ -293,6 +293,162 @@
             opacity: .4;
             filter: grayscale(1);
         }
+
+        /* モーダル全体 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 10000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .history-panel {
+            width: 90%;
+            max-width: 900px;
+            height: 80%;
+            background: #1a1a1a;
+            color: #fff;
+            border: 2px solid #444;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+
+        .history-header {
+            padding: 15px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .history-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* 左サイドバー（リスト） */
+        .history-sidebar {
+            width: 200px;
+            overflow-y: auto;
+            border-right: 1px solid #444;
+            background: #222;
+        }
+
+        .history-item {
+            padding: 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #333;
+            transition: 0.2s;
+        }
+
+        .history-item:hover {
+            background: #333;
+        }
+
+        .history-item.active {
+            background: #444;
+            border-left: 4px solid #00d2ff;
+        }
+
+        .history-date {
+            font-size: 0.8em;
+            color: #888;
+        }
+
+        /* メインエリア */
+        .history-main {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* VS表示（決戦演出） */
+        .vs-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #111;
+            border-radius: 10px;
+        }
+
+        .candidate-big {
+            text-align: center;
+            width: 150px;
+        }
+
+        .candidate-big img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #555;
+        }
+
+        .winner-glow img {
+            border-color: #ffd700;
+            box-shadow: 0 0 20px #ffd700;
+        }
+
+        .vs-text {
+            font-size: 2em;
+            font-weight: bold;
+            margin: 0 30px;
+            color: #ff4444;
+            font-style: italic;
+        }
+
+        .vote-count-big {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        /* 投票詳細リスト */
+        .vote-breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .candidate-card {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+
+        .voter-icons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .voter-mini {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 1px solid #666;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <script src="https://js.puter.com/v2/"></script>
@@ -481,6 +637,22 @@
 
 
     </div>
+    <div id="historyModal" style="display:none;" class="modal-overlay">
+        <div class="modal-content history-panel">
+            <div class="history-header">
+                <h2>📜 国家選挙記録アーカイブ</h2>
+                <button onclick="closeHistory()" class="close-btn">×</button>
+            </div>
+            <div class="history-body">
+                <div id="historyList" class="history-sidebar"></div>
+                <div id="historyDetail" class="history-main">
+                    <p style="text-align:center; color:#aaa;">閲覧したい記録を選択してください。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button onclick="openHistory()" style="position:fixed; bottom:10px; left:10px; z-index:999;">📜 選挙履歴</button>
 
     <div id="settings-panel" class="panel">
         <strong>⚙️ 基本設定</strong>
@@ -598,6 +770,21 @@
             area.style.display = (select.value === 'individual') ? 'block' : 'none';
         };
 
+        window.togglebrain = function (select) {
+            const item = select.closest('.clone-item');
+            const area = item.querySelector('.clone-brain-ai');
+
+            // 3. セレクトボックスの値によって処理を変える
+            if (select.value === "on") {
+                area.textContent = "AI使用中"; // 表示する文字
+                area.style.color = "blue";     // ついでに色も変えてみる
+            } else {
+                area.textContent = "停止中";
+                area.style.color = "gray";
+            }
+
+        };
+
         // Mod定義
         const PUBLIC_MODS = [
             { name: "標準AI", path: "mods/default.json" }
@@ -637,6 +824,14 @@
 
         let chairmanMode = true;
         let chairmanHistory = []; // 歴代議長の記録
+        // グローバル変数として履歴リストを作成
+        let electionHistory = [];
+
+        /**
+         * 選挙結果を記録する関数
+         * @param {Object} votes - { "Grok": 5, "Claude": 3 ... } のような集計結果
+         * @param {Array} votersLog - 誰が誰に入れたかの詳細ログ（後述の修正で作成）
+         */
         let approvalRating = 50;
         let is_vote = false;
         let npcskip = false;
@@ -781,8 +976,9 @@
             <input type="file" class="clone-icon-file" style="display:none;" onchange="updateCloneIcon(this)">
             <img src="${data.aiImage}" class="clone-icon-preview" style="width:30px; height:30px; border-radius:50%; cursor:pointer;" onclick="this.previousElementSibling.click()">
             <input type="text" value="${data.aiName}" class="clone-name-input" style="width:80px; margin:0 5px;">
+            <input type="text" class="clone-fav-word" placeholder="口癖" style="width:60px; font-size:0.8em; border:1px solid #ddd; border-radius:3px;">
+
             <button class="btn btn-red" style="padding:2px 8px; margin-left:auto;" onclick="this.parentElement.parentElement.remove()">×</button>
-                        <input type="text" class="clone-fav-word" placeholder="口癖" style="width:60px; font-size:0.8em; border:1px solid #ddd; border-radius:3px;">
 
         </div>
         
@@ -800,7 +996,10 @@
                     <input type="file" style="display:none;" onchange="window.loadSpecificBrain(this)">
                 </div>
                 <div>NGワード: <input type="text" class="clone-ng-word" placeholder="禁止用語" style="width:80px;"></div>
-            </div>
+                    頭いいAI: <select class="clone-brain-ai" onchange="window.togglebrain(this)">
+                        <option value="off">オフ</option>
+                        <option value="on">オン</option>
+                    </select>            </div>
         </details>
     `;
             list.appendChild(div);
@@ -836,12 +1035,15 @@
 
             items.forEach(item => {
                 const name = item.querySelector('.clone-name-input')?.value || "";
+                const fav = item.querySelector('.clone-fav-word')?.value || "";
+
                 const icon = item.querySelector('.clone-icon-preview')?.src || "";
                 const brainType = item.querySelector('.clone-brain-type')?.value || "share";
 
                 data.push({
                     name,
                     icon,
+                    fav,
                     brainType,
                     brain: item.aiSpecificBrain || {}
                 });
@@ -876,6 +1078,8 @@
                         const item = list.lastElementChild;
 
                         item.querySelector('.clone-name-input').value = d.name || "";
+                        item.querySelector('.clone-fav-word').value = d.fav || "";
+
                         item.querySelector('.clone-icon-preview').src = d.icon || "";
                         item.querySelector('.clone-brain-type').value = d.brainType || "share";
 
@@ -1032,6 +1236,7 @@
             const votes = {};
             let canana = [];
             candidates.forEach(v => votes[v.name] = 0);
+            let voteLogDetails = [];
 
             for (let voter of activeMembers) {
                 if (voter.type === 'user' || voter.name === data.userName) continue;
@@ -1043,6 +1248,7 @@
                 let target = decideVoteFromList(voter, candidates);
                 votes[target.name]++;
                 let img = voter.aiImage || voter.image || "";
+                voteLogDetails.push({ voter: voter.name, voterImg: voter.image, votedFor: target.name });
                 if (npcskip) {
                     await sleep(10);
 
@@ -1059,6 +1265,8 @@
 
             showVoteButtons(candidates, (picked) => {
                 votes[picked.name]++;
+                voteLogDetails.push({ voter: data.userName, voterImg: data.userImage, votedFor: picked.name });
+                saveElectionResult(votes, voteLogDetails, 1);
                 finishElection(votes);
             });
         }
@@ -1290,6 +1498,157 @@
             chairmanHistory.unshift(record); // 新しい順に保存（先頭に追加）
         }
 
+        // ✅ 引数に round を追加
+        function saveElectionResult(votes, votersLog, round) {
+            const timestamp = new Date().toLocaleTimeString();
+
+            // 回数に応じた選挙区分の名前
+            let electionType = "本選挙";
+            if (round === 2) electionType = "決選投票";
+            if (round >= 3) electionType = `最終決戦 (第${round - 2}次)`;
+
+            // 得票数ソート
+            const sortedResults = Object.entries(votes)
+                .sort(([, a], [, b]) => b - a)
+                .map(([name, count]) => {
+                    const member = activeMembers.find(m => m.name === name) ||
+                        (name === data.userName ? { image: data.userImage } : { image: "" });
+                    return {
+                        name: name,
+                        count: count,
+                        image: member.image || "default_icon.png"
+                    };
+                });
+
+            const top = sortedResults[0];
+
+            // 履歴に追加
+            electionHistory.push({
+                id: electionHistory.length + 1, // 通し番号
+                roundName: electionType,        // ★ここが新しい！ "決選投票"などが記録される
+                time: timestamp,
+                winner: top,
+                results: sortedResults,
+                votersLog: votersLog
+            });
+
+            console.log(`選挙履歴保存(Round ${round}):`, electionHistory);
+        }
+
+        // 履歴モーダルを開く
+        function openHistory() {
+            document.getElementById('historyModal').style.display = 'flex';
+            renderHistoryList();
+        }
+
+        // 履歴モーダルを閉じる
+        function closeHistory() {
+            document.getElementById('historyModal').style.display = 'none';
+        }
+
+        // サイドバー（リスト）を描画
+        function renderHistoryList() {
+            const list = document.getElementById('historyList');
+            list.innerHTML = "";
+
+            // 新しい順に表示
+            [...electionHistory].reverse().forEach((rec) => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+            <div>第${rec.id}回 選挙</div>
+            <div class="history-date">${rec.time}</div>
+            <div style="color:#ffd700">👑 ${rec.winner.name}</div>
+        `;
+                div.onclick = () => showHistoryDetail(rec);
+                list.appendChild(div);
+            });
+        }
+
+        // 詳細画面を描画（ここがメイン！）
+        // 詳細画面を描画
+        function showHistoryDetail(rec) {
+            const container = document.getElementById('historyDetail');
+
+            // 1位、2位を取得
+            const first = rec.results[0];
+            const second = rec.results[1] || { name: "候補なし", count: 0, image: "" };
+            // 3位を取得（いない場合は undefined になる）
+            const third = rec.results[2];
+
+            // HTML構築
+            let html = `
+        <h3>📊 第${rec.id}回 ${rec.roundName || "投票結果"}</h3>
+        
+        <div class="vs-container" style="justify-content: center; gap: 15px;">
+            <div class="candidate-big winner-glow">
+                <img src="${first.image}" onerror="this.src=''">
+                <div class="vote-count-big">${first.count}票</div>
+                <div>${first.name}</div>
+                <div style="color:gold; font-size:0.8em; font-weight:bold;">WINNER</div>
+            </div>
+            
+            <div class="vs-text" style="font-size:1.2em; margin:0 5px;">/</div>
+            
+            <div class="candidate-big" style="opacity: 0.9;">
+                <img src="${second.image}" onerror="this.src=''">
+                <div class="vote-count-big">${second.count}票</div>
+                <div>${second.name}</div>
+                <div style="font-size:0.7em; color:#aaa;">2nd</div>
+            </div>
+    `;
+
+            // 🚩 3位が存在する場合のみ表示を追加
+            if (third) {
+                html += `
+            <div class="vs-text" style="font-size:1.2em; margin:0 5px;">/</div>
+
+            <div class="candidate-big" style="opacity: 0.6;">
+                <img src="${third.image}" onerror="this.src=''">
+                <div class="vote-count-big">${third.count}票</div>
+                <div>${third.name}</div>
+                <div style="font-size:0.7em; color:#888;">3rd</div>
+            </div>
+        `;
+            }
+
+            // VSエリアを閉じて、下部のリストへ
+            html += `
+        </div>
+        <hr style="border-color:#444; margin:20px 0;">
+        <h4>🗳 投票内訳</h4>
+        <div class="vote-breakdown">
+    `;
+
+            // 各候補者ごとの詳細カード作成
+            rec.results.forEach((candidate, index) => {
+                const supporters = rec.votersLog.filter(log => log.votedFor === candidate.name);
+
+                // 順位に応じた枠線の色
+                let borderStyle = "1px solid #444";
+                if (index === 0) borderStyle = "2px solid gold";
+                if (index === 1) borderStyle = "2px solid silver";
+                if (index === 2) borderStyle = "2px solid #cd7f32"; // ブロンズ色
+
+                html += `
+            <div class="candidate-card" style="border: ${borderStyle};">
+                <div style="font-weight:bold; margin-bottom:5px; display:flex; justify-content:space-between;">
+                    <span>${index + 1}. ${candidate.name}</span>
+                    <span>${candidate.count}票</span>
+                </div>
+                <div class="voter-icons">
+                    ${supporters.map(s => `
+                        <img src="${s.voterImg}" class="voter-mini" title="${s.voter} → ${candidate.name}" onerror="this.style.display='none'">
+                    `).join('')}
+                </div>
+            </div>
+        `;
+            });
+
+            html += `</div>`;
+            container.innerHTML = html;
+        }
+
         // 終了理由を判定するヘルパー
         function getTermEndReason() {
             if (approvalRating < 20) return "辞任";
@@ -1329,6 +1688,13 @@
             lastApproval = approvalRating;
             const votes = {};
             let scores = {};
+            let candidatesObjs = finalists.map(name => {
+                let m = activeMembers.find(am => am.name === name);
+                if (!m && name === data.userName) return { name: data.userName, image: data.userImage, type: 'user' };
+                return m;
+            }).filter(v => v); // undefined除去
+            finalists.forEach(n => votes[n] = 0);
+            let voteLogDetails = []; // ★このラウンド用のログ
             // 🤖 AI/NPC投票
             for (let voter of activeMembers) {
                 if (voter.name === data.userName) continue;
@@ -1371,6 +1737,7 @@
                 }
                 let pickName = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
                 votes[pickName] = (votes[pickName] || 0) + 1;
+                voteLogDetails.push({ voter: voter.name, voterImg: voter.image, votedFor: pickName });
             }
 
             // 👤 プレイヤー投票
@@ -1382,34 +1749,112 @@
                 (picked) => {
                     votes[picked.name] = (votes[picked.name] || 0) + 1;
                     is_vote = false;
-
+                    votes[picked.name] = (votes[picked.name] || 0) + 1;
+                    voteLogDetails.push({ voter: data.userName, voterImg: data.userImage, votedFor: picked.name });
                     addBubble(data.userName, `私は ${picked.name} に投票します。`, data.userImage || "", true);
 
-                    // --- ここで「第2次決選」が必要か判定 ---
+                    // 3. 🏁 集計と次ラウンド判定
                     const sorted = Object.entries(votes).sort((a, b) => b[1] - a[1]);
                     const topVotes = sorted[0][1];
-                    const totalVotes = activeMembers.length;
+                    const secondVotes = sorted[1] ? sorted[1][1] : 0;
+                    const totalVotes = Object.values(votes).reduce((a, b) => a + b, 0);
 
-                    // 過半数獲得者がいる、または既に2名での決選だった場合は終了
-                    if (topVotes > totalVotes / 2 || finalists.length <= 2) {
+                    // 履歴に保存
+                    saveElectionResult(votes, voteLogDetails, round);
+                    // --- 決着ルール ---
+                    let isDecided = false;
+
+                    if (round === 2) {
+                        // 三つ巴：過半数が必要
+                        if (topVotes > totalVotes / 2) isDecided = true;
+                    } else {
+                        // 最終決戦（2人）：1票でも多ければ勝ち。同点なら泥沼継続。
+                        if (topVotes > secondVotes) isDecided = true;
+                    }
+
+                    if (isDecided) {
+                        // 🏆 決着！ finishElection に投げて議長就任へ
                         finishElection(votes, round);
                     } else {
-                        // ❌ 過半数なし → 上位2名で最終決選へ
-                        let nextFinalists = sorted.slice(0, 2).map(v => v[0]);
+                        // ❌ 決着つかず → 次のラウンドへ
+                        let nextFinalists = [];
+                        let message = "";
 
-                        addBubble("システム",
-                            `⚔ 第3極の ${sorted[2][0]} が脱落。上位2名による【最終決選投票】に移ります。\n<br />最終候補: ${nextFinalists.join(" vs ")}`,
-                            "",
-                            false
-                        );
+                        if (round === 2) {
+                            // 三つ巴で決まらなかった → 上位2名で最終決戦へ
+                            nextFinalists = sorted.slice(0, 2).map(v => v[0]);
+                            addBubble("システム",
+                                `⚔ 第3極の ${sorted[2][0]} が脱落。上位2名による【最終決選投票】に移ります。\n<br />最終候補: ${nextFinalists.join(" vs ")}`,
+                                "",
+                                false
+                            );
+                        } else {
+                            // 最終決戦で同点 → 同じ2名で再投票
+                            nextFinalists = [sorted[0][0], sorted[1][0]];
+                            message = `⚠️最終決戦に進みます...`;
+                        }
 
-                        // 自分自身を呼び出して再投票（候補者を2名に絞る）
+                        addBubble("システム", message + `<br />候補: ${nextFinalists.join(" vs ")}`, "", false);
                         setTimeout(() => runoffElection(nextFinalists, round + 1), 1000);
                     }
-                }
-            );
+                });
         }
+        // 決選投票の集計ロジック
+        function finishRunoff(votes, round) {
+            let sorted = Object.entries(votes).sort((a, b) => b[1] - a[1]);
+            let winner = sorted[0][0];
+            let max = sorted[0][1];
 
+            // 総投票数
+            let totalVotes = 0;
+            for (let n in votes) totalVotes += votes[n];
+
+            let report = `📊 ${round >= 3 ? "最終決戦" : "決選投票"}結果:\n`;
+            sorted.forEach(v => report += `<br />${v[0]} : ${v[1]} 票`);
+
+            // --- 勝利条件判定 ---
+            // ラウンド3以降（最終決戦）は、同点じゃなければ即決定（過半数ルール撤廃、多数決のみ）
+            // ラウンド2（三つ巴）は、過半数が必要。ダメなら上位2名でラウンド3へ。
+
+            let decided = false;
+
+            if (round >= 3) {
+                // 最終決戦: 同点でなければ決着
+                if (sorted.length > 1 && sorted[0][1] === sorted[1][1]) {
+                    decide = false; // ドロー
+                } else {
+                    decided = true;
+                }
+            } else {
+                // 三つ巴: 過半数チェック
+                if (max > totalVotes / 2) decided = true;
+            }
+
+            // --- 結果分岐 ---
+            if (decided) {
+                // ■ 決着！
+                // 通常ループへ戻る
+
+            } else {
+                // ■ 泥沼継続...
+                let nextCandidates = [];
+
+                if (round === 2) {
+                    // 三つ巴で決まらなかった → 上位2名で最終決戦へ
+                    nextCandidates = [sorted[0][0], sorted[1][0]];
+                    addBubble("システム", report + `\n<br />⚖️ 過半数なし。上位2名による【最終決戦】へ移行します。`, "", false);
+                } else {
+                    // 最終決戦で同点だった → 同じメンツで再投票（無限編）
+                    nextCandidates = sorted.map(s => s[0]);
+                    addBubble("システム", report + `\n<br />⚠️ 得票数が同数です！ 決着がつくまで再投票を行います...`, "", false);
+                }
+
+                // 再帰呼び出し（ラウンド数を +1 する）
+                setTimeout(() => {
+                    runoffElection(nextCandidates, round + 1);
+                }, 2000);
+            }
+        }
 
         function nyukoku() {
             // 鎖国中なら入国不可（過激派の仕業）
@@ -2556,54 +3001,53 @@
         }
 
         function chairmanMassRelease() {
-            // 1. 釈放対象がいるかチェック（.length を使う！）
-            if (!expelled || expelled.length === 0) return;
+            // 🚩 修正1: 釈放対象がいるかチェック（expelledがSet型なら size、配列なら length）
+            const count = expelled.size !== undefined ? expelled.size : expelled.length;
+            if (!expelled || count === 0) return;
 
-            // victimsコピーを作成
+            // 🚩 修正2: 議長の生存チェック（ここがクラッシュの原因）
+            if (!chairman) {
+                addBubble("システム", "🕊️ 暫定政府により、恩赦と集団釈放が決定された。", "", false);
+            } else {
+                // 修正ポイント： chairman.name || "デモ参加者" ではなく、文字列として扱う
+                const cName = chairman.name || "暫定議長";
+                addBubble("システム",
+                    `🕊️ ${chairmanTitle} ${cName} は恩赦を出し、集団釈放を決定した。`,
+                    "",
+                    false
+                );
+            }
+
+            // --- 以降の処理 ---
             let victims = [...expelled];
-            // 釈放する人数（50%）
             let releaseCount = Math.max(1, Math.floor(victims.length * 0.5));
-
-            addBubble("システム",
-                `🕊️ ${chairmanTitle} ${chairman.name || デモ参加者} は恩赦を出し、集団釈放を決定した。`,
-                "",
-                false
-            );
 
             for (let i = 0; i < releaseCount; i++) {
                 if (victims.length === 0) break;
-
-                // ランダムに一人選ぶ (オブジェクトを取り出す)
                 let index = Math.floor(Math.random() * victims.length);
                 let v = victims.splice(index, 1)[0];
                 if (!v) continue;
 
-                // ✅ 修正2: 名簿(expelled)からこの人を消す
-                // filterに "v" そのものを入れるのではなく、関数を入れる！
-                expelled = expelled.filter(member => member.name !== v.name);
+                // セット型か配列型かによって消し方を変える
+                if (expelled instanceof Set) {
+                    expelled.delete(v);
+                } else {
+                    expelled = expelled.filter(member => member.name !== v.name);
+                }
 
-                // ✅ 修正3: 生存リスト(activeMembers)に戻す
-                // すでに中にいないかチェックしてから入れる（二重登録防止）
                 if (!activeMembers.find(m => m.name === v.name)) {
                     activeMembers.push(v);
                 }
+                if (v.name === data.userName) playerAlive = true;
 
-                // 3. プレイヤー復帰判定
-                if (v.name === data.userName) {
-                    playerAlive = true;
-                }
-
-                // 支持率アップ（上限100まで）
                 approvalRating = Math.min(100, approvalRating + 5);
-
                 addBubble("システム", `🔓 ${v.name} は釈放された。`, "", false);
             }
 
-            // 5. UI更新
-            const headerTitle = document.getElementById('header-title');
-            if (headerTitle) {
-                headerTitle.innerText = `会議中 (${activeMembers.length}名)`;
+            if (document.getElementById('header-title')) {
+                document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
             }
+            updateStatusUI(); // UIを同期
         }
 
 
