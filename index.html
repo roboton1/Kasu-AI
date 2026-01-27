@@ -48,6 +48,32 @@
             transform: scale(1.05);
         }
 
+        .member-panel {
+            background: #1c1c1c;
+            padding: 10px;
+            border-radius: 12px;
+            width: 260px;
+            color: white;
+        }
+
+        .member-card {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: #2a2a2a;
+            margin: 6px 0;
+            padding: 6px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .member-card img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+        }
+
+
         #chat-container {
             width: 100%;
             max-width: 500px;
@@ -269,6 +295,8 @@
             right: 0;
             background: linear-gradient(90deg, #111, #222);
             display: flex;
+            pointer-events: auto;
+
             /* 横並びのベース */
             flex-wrap: wrap;
             /* はみ出したら改行 */
@@ -283,6 +311,9 @@
         .factionBox {
             background: #1e1e1e;
             border-radius: 8px;
+            position: relative;
+            z-index: 20000;
+
             padding: 6px 10px;
             min-width: 140px;
             color: #ddd;
@@ -371,6 +402,81 @@
             overflow-y: auto;
         }
 
+        .factionBox {
+            background: #333;
+            border-radius: 14px;
+            padding: 10px;
+            margin: 8px;
+        }
+
+        .faction-ui-btn {
+            width: 100%;
+            border: none;
+            border-radius: 8px;
+            background: #333;
+            color: white;
+            padding: 4px;
+            cursor: pointer;
+            margin: 4px 0;
+            position: relative;
+            z-index: 30000;
+        }
+
+        .faction-leader-wrap {
+            display: flex;
+            justify-content: center;
+            margin: 8px 0;
+        }
+
+        .faction-leader-card {
+            text-align: center;
+            background: white;
+            padding: 8px;
+            border-radius: 12px;
+            width: 120px;
+        }
+
+        .faction-leader-card img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .leader-name {
+            color: #111;
+            font-weight: bold;
+        }
+
+        .member-name {
+            color: #111;
+            font-weight: bold;
+        }
+
+        .faction-members-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            justify-content: center;
+        }
+
+        .faction-member-card {
+            width: 55px;
+            background: white;
+            border-radius: 10px;
+            padding: 4px;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .faction-member-card img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+
         /* VS表示（決戦演出） */
         .vs-container {
             display: flex;
@@ -448,6 +554,117 @@
             color: white;
             font-size: 24px;
             cursor: pointer;
+        }
+
+        .faction-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 20000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s ease;
+        }
+
+        .faction-modal.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .faction-modal-window {
+            background: #222;
+            color: white;
+            border-radius: 16px;
+            padding: 16px;
+            min-width: 320px;
+            max-width: 520px;
+
+            max-height: 80vh;
+            /* ← 画面の8割まで */
+            overflow-y: auto;
+            /* ← 縦スクロール */
+
+            transform: scale(.85);
+            opacity: 0;
+            transition: .25s ease;
+        }
+
+
+        .faction-modal.show .faction-modal-window {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        .faction-close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 20px;
+            float: right;
+            cursor: pointer;
+        }
+
+        .member-modal {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+        }
+
+        .member-modal.active {
+            display: flex;
+        }
+
+        .member-modal-bg {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .55);
+        }
+
+        .member-modal-window {
+            position: relative;
+            background: #222;
+            color: white;
+            padding: 14px;
+            border-radius: 16px;
+            width: 300px;
+            max-height: 80vh;
+            overflow-y: auto;
+
+            transform: scale(.85);
+            opacity: 0;
+            transition: .25s ease;
+        }
+
+        .member-modal.active .member-modal-window {
+            transform: scale(1);
+            opacity: 1;
+        }
+
+        .member-list {
+            margin-top: 8px;
+        }
+
+        .member-card {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: #2a2a2a;
+            margin: 6px 0;
+            padding: 6px;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .member-card img {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
         }
     </style>
 </head>
@@ -651,6 +868,20 @@
             </div>
         </div>
     </div>
+    <button onclick="openMemberModal()">🔍 メンバーを探す</button>
+    <div id="memberModal" class="member-modal">
+        <div class="member-modal-bg" onclick="closeMemberModal()"></div>
+
+        <div class="member-modal-window">
+            <h3>🔍 メンバー検索</h3>
+            <input id="memberSearch" placeholder="名前で検索..." oninput="renderMemberList()">
+
+            <div id="memberList" class="member-list"></div>
+
+            <button onclick="closeMemberModal()">閉じる</button>
+        </div>
+    </div>
+
 
     <button onclick="openHistory()" style="position:fixed; bottom:10px; left:10px; z-index:999;">📜 選挙履歴</button>
 
@@ -692,6 +923,14 @@
         <div id="mod-load-list"></div>
     </div>
     <div id="factionBar"></div>
+    <div id="factionModal" class="faction-modal hidden">
+        <div class="faction-modal-window">
+            <button class="faction-close-btn" onclick="closeFactionModal()">✖</button>
+            <div id="factionDetail"></div>
+        </div>
+    </div>
+
+
 
 
     <script>
@@ -748,6 +987,8 @@
 
                     // ✅ 登録
                     activeMembers.push(newMember);
+                    renderMemberList();
+
 
                     console.log("Loaded AI:", newMember);
                     addBubble("システム", `🤖 ${name} をロードしました`, "", false);
@@ -871,6 +1112,15 @@
                 false
             );
         }
+        function openMemberModal() {
+            document.getElementById("memberModal").classList.add("active");
+            renderMemberList();
+        }
+
+        function closeMemberModal() {
+            document.getElementById("memberModal").classList.remove("active");
+        }
+
 
         function loadConference(jsonText) {
             try {
@@ -1430,6 +1680,7 @@
 
                     // 🚩 議長がセットされた「後」に副議長を決める
                     approvalRating = 50;
+                    recommendedMember = null;
 
 
                     // 任期開始処理など
@@ -1941,6 +2192,33 @@
                 renderCheckboxes(activeMembers); // UI更新
             }
         }
+
+        function renderMemberList() {
+            const list = document.getElementById("memberList");
+            const key = document.getElementById("memberSearch").value.toLowerCase();
+
+            list.innerHTML = "";
+
+            activeMembers
+                .filter(m => m.name.toLowerCase().includes(key))
+                .forEach(m => {
+                    const div = document.createElement("div");
+                    div.className = "member-card";
+
+                    div.innerHTML = `
+          <img src="${m.image}" onerror="this.style.display='none'">
+          <div>${m.name}</div>
+        `;
+
+                    div.onclick = () => openMemberDetail(m);
+                    list.appendChild(div);
+                });
+        }
+
+        function openMemberDetail(m) {
+            alert(`👤 ${m.name}\nfav:${m.fav}\nng:${m.ng}`);
+        }
+
 
         function generateFactionName() {
             let keys = generateName(data.brain);
@@ -2763,6 +3041,8 @@
                         }
                     }
                 }
+                renderMemberList();
+
 
 
                 // --- AIの発言生成と表示の修正 ---
@@ -2848,6 +3128,8 @@
                 document.getElementById("ui-approval").value = approvalRating;
                 document.getElementById("ui-approval-text").innerText = Math.floor(approvalRating) + "%";
                 document.getElementById("ui-sakoku").innerText = sakoku ? "⛔閉鎖" : "🔓稼働";
+                document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
+
 
                 // 議長の色（派閥色など）をパネルの枠線にする演出
                 if (chairman.faction) {
@@ -3391,18 +3673,74 @@
                 let div = document.createElement("div");
                 div.className = "factionBox" + (f.alive ? "" : " factionDead");
 
+
+
                 let names = f.members.map(m => m.name).join(", ");
 
                 div.innerHTML = `
-            <b>${f.name}</b><br>
-            👑 ${f.leader?.name || "-"}<br>
-            👥 ${f.members.length}<br>
-            <small>${names}</small>
-        `;
+  <b>${f.name}</b><br>
+  👑 ${f.leader?.name || "-"}<br>
+  👥 ${f.members.length}<br>
+  <small>${names}</small>
+
+  <button class="faction-ui-btn" onclick="showFactionDetail('${f.name.replace(/'/g, "\\'")}')">
+    📜 詳細
+  </button>
+`;
+
 
                 bar.appendChild(div);
             });
         }
+
+        function showFactionDetail(name) {
+            const f = factions.concat(deadFactions).find(x => x.name === name);
+            if (!f) return;
+
+            const d = document.getElementById("factionDetail");
+            const modal = document.getElementById("factionModal");
+            if (!d || !modal) return;
+
+            let leader = f.leader || {};
+
+            let membersHtml = f.members
+                .filter(m => m !== f.leader)
+                .map(m => `
+          <div class="faction-member-card">
+            <img src="${m.image || ""}" onerror="this.style.display='none'">
+            <div class="member-name">${m.name}</div>
+          </div>
+        `).join("");
+
+            d.innerHTML = `
+      <h3>${f.name}</h3>
+      🎨 色: ${f.color}<br>
+      ⏳ 設立ターン: ${f.bornTurn}<br>
+
+      <div class="faction-leader-wrap">
+        <div class="faction-leader-card">
+          <img src="${leader.image || ""}" onerror="this.style.display='none'">
+          <div class="leader-name">👑 ${leader.name || "-"}</div>
+        </div>
+      </div>
+
+      <div class="faction-members-wrap">
+        ${membersHtml}
+      </div>
+    `;
+
+            modal.classList.add("show");
+        }
+        function closeFactionModal() {
+            document.getElementById("factionModal").classList.remove("show");
+        }
+        document.getElementById("factionModal").onclick = e => {
+            if (e.target.id === "factionModal") closeFactionModal();
+        };
+
+
+
+
 
 
 
