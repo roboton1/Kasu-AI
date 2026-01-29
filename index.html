@@ -1001,6 +1001,8 @@
 
     <button onclick="openHistory()" style="position:fixed; bottom:10px; left:10px; z-index:999;">📜 選挙履歴</button>
     <button onclick="openPrisonModal()" style="position:fixed; bottom:10px; left:105px; z-index:999;">刑務所</button>
+    <button onclick="openTownModal()" style="position:fixed; bottom:40px; left:10px; z-index:999;">都市</button>
+
 
     <div id="settings-panel" class="panel">
         <strong>⚙️ 基本設定</strong>
@@ -1109,6 +1111,29 @@
                 <div id="judgeSpeakerName" style="color:gold; font-size:0.9em; margin-bottom:5px;"></div>
                 <div id="verdictText" style="font-size:1.8em; font-weight:bold; color:white;"></div>
                 <div id="verdictSubText" style="color:#888; font-size:0.8em;"></div>
+            </div>
+        </div>
+    </div>
+    <div id="townModal" class="modal-backdrop" style="display:none; z-index:7000; background:rgba(0,0,0,0.9);">
+        <div
+            style="width:95%; max-width:1200px; height:90vh; background:#2e7d32; border:10px solid #1b5e20; border-radius:20px; display:flex; flex-direction:column; position:relative; overflow:hidden;">
+
+            <div
+                style="padding:15px; background:#1b5e20; color:white; display:flex; justify-content:space-between; align-items:center;">
+                <h2 style="margin:0;">🏘️ 都市システム v1.0</h2>
+                <div id="townBreadcrumb" style="font-size:14px; color:gold;">街全体 ＞</div>
+                <button onclick="closeTownModal()"
+                    style="background:#f44336; border:none; color:white; padding:5px 15px; cursor:pointer;">閉じる</button>
+            </div>
+
+            <div id="townView"
+                style="flex:1; padding:20px; overflow-y:auto; display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:20px;">
+            </div>
+
+            <div id="detailView"
+                style="display:none; position:absolute; top:50px; left:0; width:100%; height:calc(100% - 50px); background:#333; z-index:10; padding:20px; overflow-y:auto;">
+                <button onclick="backToTown()" style="margin-bottom:10px;">⬅ 街に戻る</button>
+                <div id="detailContent"></div>
             </div>
         </div>
     </div>
@@ -1474,6 +1499,222 @@
         function closePrisonModal() {
             document.getElementById('prisonModal').style.display = 'none';
         }
+
+        // 街モーダル
+        // --- 街の定義データ ---
+        const townBuildings = [
+            { id: "city_hall", name: "市役所", icon: "🏛️", rooms: ["市長室", "公文書保管庫", "受付"] },
+            { id: "factory", name: "国営工場", icon: "🏭", rooms: ["製造ライン", "休憩室", "資材置き場"] },
+            { id: "park", name: "中央広場", icon: "🌳", rooms: ["噴水前", "ベンチ", "秘密の裏路地"] },
+            { id: "prison_facility", name: "国立刑務所", icon: "⛓️", rooms: ["独居房", "食堂", "シャワー室", "運動場"], isPrison: true }
+        ];
+
+        let townFamilies = [];
+
+        // 家族と家の生成
+        function generateTownData() {
+            townFamilies = [];
+            let members = [...activeMembers];
+            members.sort(() => Math.random() - 0.5);
+
+            while (members.length > 0) {
+                const familySize = Math.floor(Math.random() * 3) + 2;
+                const familyMembers = members.splice(0, familySize);
+                if (familyMembers.length === 0) break;
+
+                const houseId = `HOUSE-${Math.floor(1000 + Math.random() * 9000)}`;
+                townFamilies.push({
+                    id: houseId,
+                    familyName: familyMembers[0].name + "家",
+                    members: familyMembers,
+                    rooms: ["リビング", "寝室", "キッチン", "バスルーム"],
+                    icon: "🏠"
+                });
+            }
+        }
+
+        // --- モーダル制御関数（windowに紐付けて確実に呼び出せるようにする） ---
+        window.openTownModal = function () {
+            generateTownData();
+            const modal = document.getElementById('townModal');
+            if (modal) {
+                modal.style.display = 'flex';
+                renderTownView();
+            }
+        };
+
+        window.closeTownModal = function () {
+            const modal = document.getElementById('townModal');
+            if (modal) modal.style.display = 'none';
+        };
+
+        window.backToTown = function () {
+            document.getElementById('townView').style.display = 'grid';
+            document.getElementById('detailView').style.display = 'none';
+            document.getElementById('townBreadcrumb').innerText = "街全体 ＞";
+        };
+
+        // --- 描画ロジック ---
+        function renderTownView() {
+            const townView = document.getElementById('townView');
+            if (!townView) return;
+
+            let html = townBuildings.map(b => `
+        <div class="building-card" onclick="openBuildingDetail('public', '${b.id}')" style="background:#1b5e20; border:2px solid gold; padding:20px; border-radius:10px; text-align:center; cursor:pointer;">
+            <div style="font-size:40px;">${b.icon}</div>
+            <div style="color:white; font-weight:bold;">${b.name}</div>
+        </div>
+    `).join('');
+
+            html += townFamilies.map(h => `
+        <div class="building-card" onclick="openBuildingDetail('house', '${h.id}')" style="background:#558b2f; border:2px solid white; padding:20px; border-radius:10px; text-align:center; cursor:pointer;">
+            <div style="font-size:40px;">🏠</div>
+            <div style="color:white; font-weight:bold;">${h.familyName}</div>
+            <small style="color:#eee;">${h.members.length}名居住</small>
+        </div>
+    `).join('');
+
+            townView.innerHTML = html;
+        }
+
+        window.openBuildingDetail = function (type, id) {
+            currentView = { type, id }; // 現在見ている場所を保存
+            refreshDetailView();
+        };
+
+        function refreshDetailView() {
+            const { type, id } = currentView;
+            const content = document.getElementById('detailContent');
+            const townView = document.getElementById('townView');
+            const detailView = document.getElementById('detailView');
+
+            let target, rooms;
+            if (id === 'prison_facility') {
+                closeTownModal();
+                openPrisonModal();
+            } else if (type === 'public') {
+                target = townBuildings.find(b => b.id === id);
+            } else {
+                target = townFamilies.find(h => h.id === id);
+            }
+            if (!target) return;
+
+            townView.style.display = 'none';
+            detailView.style.display = 'block';
+            rooms = target.rooms;
+
+            content.innerHTML = `
+        <h2 style="color:gold;">🔍 内部監視: ${target.name || target.familyName}</h2>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px;">
+            ${rooms.map(room => {
+                // この建物・この部屋に現在いる人をフィルタリング（重複を完全に防ぐ）
+                const peopleInThisRoom = Object.keys(citizenLocations).filter(name =>
+                    citizenLocations[name].buildingId === id && citizenLocations[name].room === room
+                );
+
+                return `
+                    <div style="background:rgba(255,255,255,0.05); border:1px solid #555; border-radius:10px; padding:15px; min-height:120px;">
+                        <h4 style="color:#81c784; font-size:12px;">${room}</h4>
+                        <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:10px;">
+                            ${peopleInThisRoom.map(name => {
+                    const p = [...activeMembers, ...expelled].find(m => m.name === name);
+                    return `
+                                    <div onclick="showPersonAction('${p.name.replace(/'/g, "\\'")}', '${room}')" style="cursor:pointer; text-align:center;">
+                                        <img src="${p.image || p.aiImage}" style="width:35px; height:35px; border-radius:50%; border:2px solid ${type === 'prison' ? 'red' : 'gold'};">
+                                        <div style="font-size:9px; color:white;">${p.name}</div>
+                                    </div>
+                                `;
+                }).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+        }
+        window.showPersonAction = function (name, room) {
+            // 現在その人がいる建物の情報を取得
+            const loc = citizenLocations[name];
+            if (!loc) return;
+
+            let actions = [];
+
+            // 建物タイプ別の行動定義
+            switch (loc.buildingType) {
+                case 'public':
+                    if (loc.buildingId === 'city_hall') {
+                        actions = ["市長に会いに来た。", "納税した。", "訪問している。。。", "職員と会話中"];
+                    } else if (loc.buildingId === 'factory') {
+                        actions = ["労働中…", "サボっている", "休憩中", "工場長と会話中", "計画中", "同僚と話している。"];
+                    } else if (loc.buildingId === 'park') {
+                        actions = ["鳩にパン屑を与えている。", "遊んでいる。", "ベンチで居眠りしている。"];
+                    }
+                    break;
+                case 'house':
+                    actions = ["掃除している。", "テレビを眺めている。", "寝ている。"];
+                    break;
+                case 'prison':
+                    actions = ["冷たい壁の感触を確かめている。", "脱獄のルートを夢想している。", "自分の罪（？）を数えている。"];
+                    break;
+                default:
+                    actions = ["静かに過ごしている。"];
+            }
+
+            const randomAction = actions[Math.floor(Math.random() * actions.length)];
+            alert(`【監視対象: ${name}】\n場所: ${room}\n状況: ${randomAction}`);
+        };
+
+        // 全市民（activeMembers + expelled）の現在地を一括管理
+        let citizenLocations = {};
+
+        function updateAllCitizenLocations() {
+            const prisoners = expelled.filter(p => p.isPrisoner);
+            const citizens = activeMembers;
+
+            // 1. 囚人の処理（刑務所に固定）
+            prisoners.forEach(p => {
+                citizenLocations[p.name] = {
+                    buildingType: 'prison',
+                    buildingId: 'prison_facility',
+                    room: p.currentLocation || "独居房"
+                };
+            });
+
+            // 2. 一般市民の処理（10秒おきの移動ロジック）
+            citizens.forEach(c => {
+                const familyHouse = townFamilies.find(f => f.members.some(m => m.name === c.name));
+
+                // 35%の確率で家にいる
+                if (familyHouse && Math.random() < 0.35) {
+                    citizenLocations[c.name] = {
+                        buildingType: 'house',
+                        buildingId: familyHouse.id,
+                        room: familyHouse.rooms[Math.floor(Math.random() * familyHouse.rooms.length)]
+                    };
+                } else {
+                    // それ以外は公共施設へ
+                    const b = townBuildings[Math.floor(Math.random() * townBuildings.length)];
+                    citizenLocations[c.name] = {
+                        buildingType: 'public',
+                        buildingId: b.id,
+                        room: b.rooms[Math.floor(Math.random() * b.rooms.length)]
+                    };
+                }
+            });
+        }
+
+        // 10秒ごとに位置を更新
+        setInterval(() => {
+            updateAllCitizenLocations();
+            // モーダルが開いていれば再描画してリアルタイム感を出す
+            if (document.getElementById('townModal').style.display === 'flex') {
+                const detailView = document.getElementById('detailView');
+                if (detailView.style.display === 'block') {
+                    // 現在開いている部屋の情報をリフレッシュ
+                    refreshDetailView();
+                }
+            }
+        }, 10000);
 
 
         function toggleChairmanMode() {
