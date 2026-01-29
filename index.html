@@ -1452,7 +1452,9 @@
             // 左側：収容者名簿
             listArea.innerHTML = currentPrisoners.length === 0 ? "<p style='color:#555;'>収容者なし</p>" :
                 currentPrisoners.map(p => `
-            <div onclick="showPrisonerDetail('${p.name.replace(/'/g, "\\'")}')" 
+            <div // 修正後
+onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
+
                  style="background:#34495e; padding:8px; border-radius:5px; margin-bottom:8px; border-left:4px solid #e74c3c; cursor:pointer;">
                 <img src="${p.image || p.aiImage}" style="width:25px; height:25px; border-radius:50%; margin-right:5px; vertical-align:middle;">
                 <b style="font-size:12px;">${p.name}</b>
