@@ -40,6 +40,7 @@
             font-weight: bold;
             font-size: 0.9em;
             transition: 0.2s;
+	    font-color: black;
         }
 
         .tab-btn.active {
@@ -1332,7 +1333,7 @@
         let recommendedMember = null;
         let chairmanTimer = null;
         let termCount = 1;
-        let expelled = new Set();
+        let expelled = [];
         let playerAlive = true;
         let electionMode = "vote";   // manual / vote
         let settings = {
@@ -1388,41 +1389,6 @@
             renderPrisonContent();
         }
 
-        function renderPrisonContent() {
-            const listArea = document.getElementById('prisonerListArea');
-            const roomView = document.getElementById('prisonRoomView');
-
-            // 左側リスト描画
-            listArea.innerHTML = expelled.length === 0 ? "<p>収容者なし</p>" :
-                Array.from(expelled).map(p => `
-            <div style="background:#34495e; padding:10px; border-radius:5px; margin-bottom:10px; border-left:5px solid #e74c3c;">
-                <img src="${p.image || p.aiImage}" style="width:40px; height:40px; border-radius:50%; vertical-align:middle;">
-                <b style="font-size:14px;">${p.name}</b><br>
-                <small>番号: ${p.prisonerId} / ${p.cellNumber}</small>
-            </div>
-        `).join('');
-
-            // 右側部屋別表示
-            // 右側部屋別表示
-            roomView.innerHTML = prisonFacilities.map(facility => {
-                const inThisRoom = expelled.filter(p => p.currentLocation === facility.name);
-                return `
-        <div style="background:rgba(0,0,0,0.4); border:1px solid #444; padding:10px; min-height:100px; border-radius:8px;">
-            <h4 style="margin:0; font-size:11px; color:gold; border-bottom:1px solid #555;">${facility.name}</h4>
-            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;">
-                ${inThisRoom.map(p => `
-                    <img src="${p.image || p.aiImage}" 
-                         onclick="showPrisonerDetail('${p.name.replace(/'/g, "\\'")}')"
-                         style="width:32px; height:32px; border-radius:50%; border:2px solid #e74c3c; cursor:pointer; transition:0.2s;"
-                         onmouseover="this.style.transform='scale(1.2)'" 
-                         onmouseout="this.style.transform='scale(1)'">
-                `).join('')}
-            </div>
-        </div>
-    `;
-            }).join('');
-        }
-
         // 囚人の詳細を表示する
         function showPrisonerDetail(pName) {
             const p = expelled.find(m => m.name === pName);
@@ -1439,7 +1405,7 @@
             alert(detailMsg);
         }
 
-        // 描画ロジックの修正
+        // 描画ロジック
         function renderPrisonContent() {
             updatePrisonerLogic(); // 会話と居場所の更新
 
@@ -1452,9 +1418,7 @@
             // 左側：収容者名簿
             listArea.innerHTML = currentPrisoners.length === 0 ? "<p style='color:#555;'>収容者なし</p>" :
                 currentPrisoners.map(p => `
-            <div // 修正後
-onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
-
+            <div onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                  style="background:#34495e; padding:8px; border-radius:5px; margin-bottom:8px; border-left:4px solid #e74c3c; cursor:pointer;">
                 <img src="${p.image || p.aiImage}" style="width:25px; height:25px; border-radius:50%; margin-right:5px; vertical-align:middle;">
                 <b style="font-size:12px;">${p.name}</b>
@@ -1620,6 +1584,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                         <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:10px;">
                             ${peopleInThisRoom.map(name => {
                     const p = [...activeMembers, ...expelled].find(m => m.name === name);
+                    if (!p) return '';
                     return `
                                     <div onclick="showPersonAction('${p.name.replace(/'/g, "\\'")}', '${room}')" style="cursor:pointer; text-align:center;">
                                         <img src="${p.image || p.aiImage}" style="width:35px; height:35px; border-radius:50%; border:2px solid ${type === 'prison' ? 'red' : 'gold'};">
@@ -1742,7 +1707,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 const data = JSON.parse(jsonText);
 
                 activeMembers = data.activeMembers || [];
-                expelled = new Set(data.expelled || []);
+                expelled = data.expelled || [];
                 chairman = data.chairman || null;
                 termCount = data.termCount || 1;
 
@@ -2431,7 +2396,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             });
         }
 
-        // 詳細画面を描画（ここがメイン！）
         // 詳細画面を描画
         function showHistoryDetail(rec) {
             const container = document.getElementById('historyDetail');
@@ -2553,7 +2517,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
         async function runoffElection(finalists, round) {
             lastApproval = approvalRating;
             const votes = {};
-            let scores = {};
             let candidatesObjs = finalists.map(name => {
                 let m = activeMembers.find(am => am.name === name);
                 if (!m && name === data.userName) return { name: data.userName, image: data.userImage, type: 'user' };
@@ -2563,7 +2526,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             let voteLogDetails = []; // ★このラウンド用のログ
             // 🤖 AI/NPC投票
             for (let voter of activeMembers) {
-                if (voter.name === data.userName) continue;
                 if (voter.name === data.userName) continue;
 
                 let scores = {};
@@ -2593,15 +2555,14 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                     }
                 });
 
+                let pickName = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
+
                 if (npcskip) {
-
                     await sleep(5);
-                    // 候補者（finalists）の中からランダム（または知的に）選ぶ
-
                     let img = voter.aiImage || voter.image || "";
                     addBubble(voter.name, `私は ${pickName} に投票します。`, img, false);
                 }
-                let pickName = Object.keys(scores).reduce((a, b) => scores[a] > scores[b] ? a : b);
+
                 votes[pickName] = (votes[pickName] || 0) + 1;
                 voteLogDetails.push({ voter: voter.name, voterImg: voter.image, votedFor: pickName });
             }
@@ -2613,7 +2574,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             showVoteButtons(
                 activeMembers.filter(m => finalists.includes(m.name)),
                 (picked) => {
-                    votes[picked.name] = (votes[picked.name] || 0) + 1;
                     is_vote = false;
                     votes[picked.name] = (votes[picked.name] || 0) + 1;
                     voteLogDetails.push({ voter: data.userName, voterImg: data.userImage, votedFor: picked.name });
@@ -2665,62 +2625,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                     }
                 });
         }
-        // 決選投票の集計ロジック
-        function finishRunoff(votes, round) {
-            let sorted = Object.entries(votes).sort((a, b) => b[1] - a[1]);
-            let winner = sorted[0][0];
-            let max = sorted[0][1];
-
-            // 総投票数
-            let totalVotes = 0;
-            for (let n in votes) totalVotes += votes[n];
-
-            let report = `📊 ${round >= 3 ? "最終決戦" : "決選投票"}結果:\n`;
-            sorted.forEach(v => report += `<br />${v[0]} : ${v[1]} 票`);
-
-            // --- 勝利条件判定 ---
-            // ラウンド3以降（最終決戦）は、同点じゃなければ即決定（過半数ルール撤廃、多数決のみ）
-            // ラウンド2（三つ巴）は、過半数が必要。ダメなら上位2名でラウンド3へ。
-
-            let decided = false;
-
-            if (round >= 3) {
-                // 最終決戦: 同点でなければ決着
-                if (sorted.length > 1 && sorted[0][1] === sorted[1][1]) {
-                    decide = false; // ドロー
-                } else {
-                    decided = true;
-                }
-            } else {
-                // 三つ巴: 過半数チェック
-                if (max > totalVotes / 2) decided = true;
-            }
-
-            // --- 結果分岐 ---
-            if (decided) {
-                // ■ 決着！
-                // 通常ループへ戻る
-
-            } else {
-                // ■ 泥沼継続...
-                let nextCandidates = [];
-
-                if (round === 2) {
-                    // 三つ巴で決まらなかった → 上位2名で最終決戦へ
-                    nextCandidates = [sorted[0][0], sorted[1][0]];
-                    addBubble("システム", report + `\n<br />⚖️ 過半数なし。上位2名による【最終決戦】へ移行します。`, "", false);
-                } else {
-                    // 最終決戦で同点だった → 同じメンツで再投票（無限編）
-                    nextCandidates = sorted.map(s => s[0]);
-                    addBubble("システム", report + `\n<br />⚠️ 得票数が同数です！ 決着がつくまで再投票を行います...`, "", false);
-                }
-
-                // 再帰呼び出し（ラウンド数を +1 する）
-                setTimeout(() => {
-                    runoffElection(nextCandidates, round + 1);
-                }, 2000);
-            }
-        }
 
         function nyukoku() {
             // 鎖国中なら入国不可（過激派の仕業）
@@ -2751,9 +2655,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             }
 
             // --- ここから通常の入国処理 ---
-            let globalKeys = Object.keys(data.brain);
-            // ...（中略：pool作成など）...
-
             // 破壊主義は大量に入れるため、確率で「もう一人」呼ぶ
             if (chairman && chairman.ideology === "破壊主義" && Math.random() < 0.5) {
                 setTimeout(chairmanInvite, 500);
@@ -2848,7 +2749,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             const target = activeMembers.find(m => m.name.trim() === member.trim()) ||
                 (member === data.userName ? { name: data.userName, image: data.userImage, ideology: "プレイヤー" } : null);
 
-            if (!member) {
+            if (!target) {
                 console.error("対象メンバーが見つかりませんでした:", member);
                 return;
             }
@@ -2856,7 +2757,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 alert(`選挙期間中は裁判できません。`);
                 return;
             }
-            if (target.name === chairman.name) {
+            if (chairman && target.name === chairman.name) {
                 alert(`事件がない限り、${chairmanTitle}を裁くことはできません。`);
                 return;
             }
@@ -2864,10 +2765,8 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 alert(`自らを裁くことはできません。`);
                 return;
             }
-            if (target) {
-                console.log("裁判開始:", target.name); // デバッグログ
-                startPurgeTrial(target);
-            }
+            console.log("裁判開始:", target.name); // デバッグログ
+            startPurgeTrial(target);
         };
 
         // 2. 裁判メインロジック
@@ -2880,7 +2779,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             const eligibleAI = activeMembers.filter(m =>
                 m.name !== defendant.name &&
                 m.name !== data.userName &&
-                !(expelled instanceof Set ? expelled.has(m.name) : (Array.isArray(expelled) && expelled.includes(m.name)))
+                !expelled.some(e => e.name === m.name)
             );
 
             const judges = eligibleAI.slice(0, 5);
@@ -2957,31 +2856,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             isPaused = false;
         }
 
-        // アイコン生成関数の微調整
-        function createTrialIcon(member, label, size, showName, imgId = "") {
-            // 観客(showName=false)の場合は名前を出さない
-            return `
-        <div class="trial-char" style="text-align:center; min-width:${size}; position:relative;">
-            <img id="${imgId}" src="${member.image || member.aiImage}" style="width:${size}; height:${size}; border-radius:50%; border:1.5px solid gold; object-fit:cover; display:block; margin:0 auto; background:#222;">
-            ${showName ? `
-                <div style="font-size:9px; color:white; margin-top:4px; line-height:1.1;">
-                    ${label ? `<b style="color:gold;">${label}</b><br>` : ""}
-                    ${member.name.substring(0, 8)}
-                </div>
-            ` : ""}
-        </div>
-    `;
-        }
-
-        function createTrialIcon(member, label, size) {
-            return `
-        <div class="trial-char" style="text-align:center; min-width:${size};">
-            <img src="${member.image || member.aiImage}" style="width:${size}; height:${size}; border-radius:50%; border:1px solid gold; object-fit:cover; display:block; margin:0 auto;">
-            <div style="font-size:8px; color:white; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:${size};">${label ? `<b>${label}</b><br>` : ""}${member.name}</div>
-        </div>
-    `;
-        }
-
         function celebrateSuccess() {
             // 被告人（defendantArea）以外のアイコンを跳ねさせる
             const targets = document.querySelectorAll('#judgesArea .trial-char, #audienceArea .trial-char, #accuserArea .trial-char');
@@ -2995,12 +2869,18 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 }, i * 30);
             });
         }
-        // アイコン生成ヘルパー
-        function createTrialIcon(member, label, size = "60px") {
+
+        // アイコン生成ヘルパー（唯一の定義）
+        function createTrialIcon(member, label, size = "60px", showName = true, imgId = "") {
             return `
-        <div class="trial-char" style="text-align:center; transition: 0.3s;">
-            <img src="${member.image || member.aiImage}" style="width:${size}; height:${size}; border-radius:50%; border:2px solid gold; object-fit:cover; background:#fff;">
-            <div style="font-size:10px; color:white; margin-top:4px;"><b>${label}</b><br>${member.name}</div>
+        <div class="trial-char" style="text-align:center; min-width:${size}; position:relative; transition: 0.3s;">
+            <img id="${imgId}" src="${member.image || member.aiImage}" style="width:${size}; height:${size}; border-radius:50%; border:2px solid gold; object-fit:cover; display:block; margin:0 auto; background:#fff;">
+            ${showName ? `
+                <div style="font-size:10px; color:white; margin-top:4px; line-height:1.1;">
+                    ${label ? `<b style="color:gold;">${label}</b><br>` : ""}
+                    ${member.name.substring(0, 8)}
+                </div>
+            ` : ""}
         </div>
     `;
         }
@@ -3009,9 +2889,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
         const wait = ms => new Promise(res => setTimeout(res, ms));
 
         function generateFactionName() {
-            let keys = generateName(data.brain);
-            if (!keys.length) keys = ["新生", "改革", "未来", "中央"];
-
             let base = generateName(data.brain);
             let tails = ["派閥", "派", "連合", "党", "の会"];
 
@@ -3069,9 +2946,11 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             const isUser = member.name === data.userName;
 
             // 除名チェック
-            if (faction.banned.includes(member)) {
-                addBubble({ name: "システム", faction },
-                    `⚠ ${member.name} は ${faction.name} から除名されています。`
+            if (faction.banned.some(b => b.name === member.name)) {
+                addBubble("システム",
+                    `⚠ ${member.name} は ${faction.name} から除名されています。`,
+                    "",
+                    false
                 );
                 return; // ← ここで return
             }
@@ -3125,7 +3004,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             // 除名リストに追加
             faction.banned.push(member);
 
-            addBubble({ name: "システム", faction }, `⚠ ${member.name} は ${faction.name} から除名されました`);
+            addBubble("システム", `⚠ ${member.name} は ${faction.name} から除名されました`, "", false);
         }
 
 
@@ -3268,7 +3147,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             // NPCを既存派閥に加入
             else if (r < 0.5 && factions.length) {
                 let faction = factions[Math.floor(Math.random() * factions.length)];
-                let pool = npcMembers.filter(m => !m.faction && !faction.banned.includes(m));
+                let pool = npcMembers.filter(m => !m.faction && !faction.banned.some(b => b.name === m.name));
                 if (pool.length) {
                     joinFaction(pool[Math.floor(Math.random() * pool.length)], faction);
                 }
@@ -3300,12 +3179,12 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
 
 
         function playerJoinFaction(faction) {
-            let player = activeMembers.find(m => m.type === data.userName);
+            let player = activeMembers.find(m => m.name === data.userName);
             if (player) joinFaction(player, faction);
         }
 
         function playerLeaveFaction() {
-            let player = activeMembers.find(m => m.type === data.userName);
+            let player = activeMembers.find(m => m.name === data.userName);
             if (player) leaveFaction(player);
         }
 
@@ -3366,13 +3245,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
         `).join("");
         }
 
-        // 全選択・解除用の便利関数
-        function selectAll(bool) {
-            const checkboxes = document.querySelectorAll('.kick-checkbox');
-            checkboxes.forEach(cb => cb.checked = bool);
-        }
-
-
         let currentMode = ""; // "kick" か "release" を保持
 
         // パネルを閉じる
@@ -3380,7 +3252,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             document.getElementById("chairman-panel").style.display = "none";
         }
 
-        // 全選択・解除
+        // 全選択・解除（唯一の定義）
         function selectAll(bool) {
             const checkboxes = document.querySelectorAll('.target-checkbox');
             checkboxes.forEach(cb => cb.checked = bool);
@@ -3405,7 +3277,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             document.getElementById("panel-confirm-btn").innerText = "釈放実行";
             document.getElementById("panel-confirm-btn").onclick = executeChairmanAction;
 
-            // expelled (Set or Array) を配列に変換
+            // expelled を配列として扱う
             const list = Array.from(expelled || []);
             renderCheckboxes(list);
 
@@ -3464,8 +3336,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
 
                 targets.forEach(m => {
                     // 追放リストに追加
-                    if (expelled instanceof Set) expelled.push(m);
-                    else expelled.push(m);
+                    expelled.push(m);
 
                     // プレイヤー生存判定
                     if (m.type === "user") playerAlive = false;
@@ -3477,20 +3348,14 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                     }
                 });
 
-                const title = typeof chairmanTitle !== 'undefined' ? chairmanTitle : '議長';
                 const msg = selectedNames.length > 1 ? `💀 ${chairmanTitle}による **大粛清**` : `⚖ ${chairmanTitle}は ${selectedNames[0]} を追放`;
                 addBubble("システム", msg, selectedNames.length > 1 ? `対象: ${selectedNames.join(", ")}` : "", false);
             } else if (currentMode === "release") {
                 // 釈放処理
-                const expelledList = Array.from(expelled);
-                const targets = expelledList.filter(m => selectedNames.includes(m.name));
+                const targets = expelled.filter(m => selectedNames.includes(m.name));
 
                 targets.forEach(member => {
-                    if (expelled instanceof Set) expelled.filter(member);
-                    else {
-                        const idx = expelled.indexOf(member);
-                        if (idx > -1) expelled.splice(idx, 1);
-                    }
+                    expelled = expelled.filter(m => m !== member);
                     activeMembers.push(member);
                     if (member.type === "user") playerAlive = true;
                 });
@@ -3632,7 +3497,8 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                     ng: ng,
                     isIndividual: (type !== 'share'),
                     ideology: getRandomIdeology(),
-                    speechCount: 0
+                    speechCount: 0,
+                    recentLines: []
                 });
             });
 
@@ -3703,7 +3569,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             addBubble("システム", `💀 ${reason}により、${target.name} が粛清されました。`, "", false);
             renderCheckboxes(activeMembers);
             setTimeout(() => {
-                const firstSpeaker = chairman
+                if (!chairman) return;
                 const starterText = `${target.name}を追放した。`;
 
                 // ループの起点を作る
@@ -3740,9 +3606,8 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 if (!conferenceRunning) return;
                 if (activeMembers.length < 2) {
                     addBubble("システム", "⚠ 参加者が不足しています。一部の人を釈放します。", "", false);
-                    if (expelled.size > 0) {
-                        let r = expelled.values().next().value;
-                        expelled.filter(r);
+                    if (expelled.length > 0) {
+                        let r = expelled.shift();
                         activeMembers.push(r);
                         addBubble("システム", `✅ ${r.name} を釈放しました。`, "", false);
                         document.getElementById('header-title').innerText = `会議中 (${activeMembers.length}名)`;
@@ -3762,7 +3627,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                             if (isMigrant) {
                                 purgeMember(speaker, "独裁者による不敬罪");
                                 approvalRating -= 10; // 粛清すると支持率低下
-                                news = `独裁者 ${chairman.name} が移民を排除しました。`;
                             }
                             break;
 
@@ -3772,7 +3636,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                             if (speaker.speechCount > 8) {
                                 purgeMember(speaker, "発言権の独占罪");
                                 approvalRating -= 5;
-                                news = `平等維持のため、多弁なAIが粛清されました。`;
                             }
                             break;
 
@@ -3781,7 +3644,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                                 purgeMember(speaker, "純血主義による排除");
                                 if (!sakoku) {
                                     sakoku = true;
-                                    news = "過激派議長により【鎖国】が強行されました！";
                                 }
                                 approvalRating -= 15;
                             }
@@ -3792,7 +3654,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                             if (Math.random() < 0.2) {
                                 chairmanInvite();
                                 approvalRating += 5; // アナーキストからは支持される
-                                news = "破壊主義議長が勝手に門戸を開放しました。";
                             }
                             break;
 
@@ -3800,14 +3661,13 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                             if (isMigrant && Math.random() < 0.5) {
                                 purgeMember(speaker, "不法滞在（ビザなし）");
                                 approvalRating -= 2;
-                                news = "自由主義の名の下に、不適切な滞在者が追放されました。";
                             }
                             break;
                     }
 
                     // --- 支持率の限界突破チェック（クーデター） ---
                     if (approvalRating < 20) {
-                        addBubble("システム", `🔥 警告：支持率が ${approvalRating}% まで低下！民衆が暴徒化しています！`, "", false);
+                        addBubble("システム", `🔥 警告：支持率が ${Math.floor(approvalRating)}% まで低下！民衆が暴徒化しています！`, "", false);
 
                         if (Math.random() < 0.1) {
                             // 1. 崩壊する議長の名前を一時保存（undefined対策）
@@ -3817,16 +3677,10 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                             recordChairmanHistory();
                             chairman = null
 
-                            // 2. 履歴に記録するなら「完全に消す前」に実行
-                            // ※ recordChairmanHistory(fallenName, "政権崩壊") のような関数があればここで呼ぶ
-
-                            // 3. 全員釈放（議長が消える前に実行するか、関数内の引数で名前を渡す）
-                            // ※ 議長がいなくても動くように修正した chairmanMassRelease を使う
                             if (Math.random() < 0.2) {
                                 chairmanMassRelease();
                             }
 
-                            // 4. ここで初めて現在の任期データをクリアする
                             clearCurrentTerm();
 
                             startElection();
@@ -3838,7 +3692,13 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
 
 
                 // --- AIの発言生成と表示の修正 ---
-                const body = generate(speaker.brain, lastTopic);
+                if (!activeMembers.includes(speaker)) {
+                    // 発話者がすでに消えている場合はスキップ
+                    if (conferenceRunning) runConferenceLoop("......消されたか。");
+                    return;
+                }
+
+                const body = generate(speaker.brain, lastTopic, speaker, targetMember);
                 speaker.speechCount = (speaker.speechCount || 0) + 1;
 
 
@@ -3848,17 +3708,14 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                     saveData();
                 }
 
-                addBubble(speaker.name, body + " " + speaker.fav, speaker.image, false);
+                addBubble(speaker.name, body + (speaker.fav && Math.random() < 0.35 ? (" " + speaker.fav) : ""), speaker.image, false);
                 if (chairmanMode) {
                     maybeFactionAction();
                 }
 
-                if (Math.random() < 1.0) {
-
-                    // A. 議長が発言した時、特別な政治アクション（招待・追放など）を判定
-                    if (chairman && speaker.name === chairman.name) {
-                        maybeChairmanAction();
-                    }
+                // A. 議長が発言した時、特別な政治アクション（招待・追放など）を判定
+                if (chairman && speaker.name === chairman.name) {
+                    maybeChairmanAction();
                 }
 
                 // --- 議長不在時の自動選挙チェック ---
@@ -4027,7 +3884,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 leaveFaction(member); // 既存関数を使う
             }
 
-            expelled.push(member.name || member); // 名前を保存
+            expelled.push(member); // オブジェクトごと保存
             activeMembers = activeMembers.filter(m => m !== member);
 
             if (member.type === "user") playerAlive = false;
@@ -4075,15 +3932,13 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
         }
 
         function chairmanMassRelease() {
-            // 🚩 修正1: 釈放対象がいるかチェック（expelledがSet型なら size、配列なら length）
-            const count = expelled.size !== undefined ? expelled.size : expelled.length;
-            if (!expelled || count === 0) return;
+            // 🚩 修正1: 釈放対象がいるかチェック
+            if (!expelled || expelled.length === 0) return;
 
-            // 🚩 修正2: 議長の生存チェック（ここがクラッシュの原因）
+            // 🚩 修正2: 議長の生存チェック（ここがクラッシュの原因だった）
             if (!chairman) {
                 addBubble("システム", "🕊️ 暫定政府により、恩赦と集団釈放が決定された。", "", false);
             } else {
-                // 修正ポイント： chairman.name || "デモ参加者" ではなく、文字列として扱う
                 const cName = chairman.name || "暫定議長";
                 addBubble("システム",
                     `🕊️ ${chairmanTitle} ${cName} は恩赦を出し、集団釈放を決定した。`,
@@ -4102,12 +3957,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 let v = victims.splice(index, 1)[0];
                 if (!v) continue;
 
-                // セット型か配列型かによって消し方を変える
-                if (expelled instanceof Set) {
-                    expelled.delete(v);
-                } else {
-                    expelled = expelled.filter(member => member.name !== v.name);
-                }
+                expelled = expelled.filter(m => m.name !== v.name);
 
                 if (!activeMembers.find(m => m.name === v.name)) {
                     activeMembers.push(v);
@@ -4215,7 +4065,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             } else {
                 // ない場合はDiceBearで自動生成
                 const seed = name || "question";
-                previewImg.src = `https://api.dicebear.com{encodeURIComponent(seed)}`;
+                previewImg.src = `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(seed)}`;
             }
         }
 
@@ -4234,7 +4084,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             }
 
             // アイコンの決定（アップロード画像 > 自動生成）
-            const finalIcon = selectedIconData || `https://api.dicebear.com{encodeURIComponent(name)}`;
+            const finalIcon = selectedIconData || `https://api.dicebear.com/7.x/personas/svg?seed=${encodeURIComponent(name)}`;
 
             const baseBrain = data.brain[name] ? data.brain[name] : data.brain;
 
@@ -4245,7 +4095,10 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 brain: JSON.parse(JSON.stringify(baseBrain)),
                 fav: "",
                 ng: "",
-                isIndividual: true
+                isIndividual: true,
+                ideology: getRandomIdeology(),
+                speechCount: 0,
+                recentLines: []
             };
 
             activeMembers.push(newMember);
@@ -4276,7 +4129,7 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             const globalKeys = Object.keys(data.brain || {});
             const pool = globalKeys.filter(k =>
                 !activeMembers.some(m => m.name === k) &&
-                !(expelled instanceof Set ? expelled.includes(k) : expelled.includes(k))
+                !expelled.some(e => e.name === k)
             );
             select.innerHTML = '<option value="">-- 選択してください --</option>' +
                 pool.map(name => `<option value="${name}">${name}</option>`).join("");
@@ -4294,12 +4147,10 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
 
             let pool = globalKeys.filter(k =>
                 !activeMembers.some(m => m.name === k) &&
-                !expelled.includes(k)
+                !expelled.some(e => e.name === k)
             );
 
-            if (!pool.length) return;
-
-            let name = generateName(data.brain);
+            let name = pool.length ? pool[Math.floor(Math.random() * pool.length)] : generateName(data.brain);
             let types = ["入国者", "移民", "留学生"];
             let mType = types[Math.floor(Math.random() * types.length)];
 
@@ -4313,7 +4164,8 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 isIndividual: true,
                 // ★新入りにも思想を与える
                 ideology: getRandomIdeology(),
-                speechCount: 0
+                speechCount: 0,
+                recentLines: []
             };
 
             activeMembers.push(newMember);
@@ -4330,33 +4182,21 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             console.log("関数開始: expelledの状態", expelled);
 
             // チェック1: 中身があるか
-            if (!expelled || (expelled.size === 0 && expelled.length === 0)) {
+            if (!expelled || expelled.length === 0) {
                 console.warn("釈放対象がいません（expelledが空です）");
                 return;
             }
 
-            let list = Array.from(expelled);
-            let member = list[Math.floor(Math.random() * list.length)];
+            let member = expelled[Math.floor(Math.random() * expelled.length)];
             console.log("選ばれたメンバー:", member);
 
-            // チェック2: メンバーのプロパティがあるか
-            if (!member) {
+            if (!member || !member.name) {
                 console.error("メンバーの取得に失敗しました");
-                return;
-            }
-            if (!member.name) {
-                console.error("メンバーにnameプロパティがありません。中身:", member);
                 return;
             }
 
             // 実行処理
-            if (expelled instanceof Set) {
-                expelled.filter(member);
-            } else {
-                // 配列の場合の削除処理
-                const index = expelled.indexOf(member);
-                if (index > -1) expelled.splice(index, 1);
-            }
+            expelled = expelled.filter(m => m !== member);
 
             activeMembers.push(member);
             approvalRating += 10;
@@ -4428,12 +4268,12 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
 
         // --- AIコア ---
         function learn(brain, text) {
-            if (!brain || !text || text.length < 3) return; // 2文字ペアを作るので最低3文字必要
+            if (!brain || !text || text.length < 3) return; // 3文字ペアを作るので最低4文字必要
 
             // 無駄な空白削除
             const cleanText = text.replace(/\s+/g, " ").trim();
 
-            // ★重要：2文字単位で学習する
+            // ★2文字＋3文字の二重チェーンで学習し、生成のバリエーションを増やす
             for (let i = 0; i < cleanText.length - 2; i++) {
                 let curr = cleanText[i] + cleanText[i + 1]; // 現在の2文字 (例: "こん")
                 let next = cleanText[i + 2];              // 次の1文字 (例: "に")
@@ -4442,14 +4282,11 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                     brain[curr] = [];
                 }
 
-                // 重複制限（2文字単位なら少し緩めてもOK）
+                // 重複制限を少し緩めて表現の幅を確保
                 const linkCount = brain[curr].filter(c => c === next).length;
-                if (linkCount < 5) {
+                if (linkCount < 8) {
                     brain[curr].push(next);
                 }
-
-                // ★「思考の飛躍（文字飛ばし）」は削除しました。
-                // 日本語生成において、文字単位でのスキップはノイズにしかなりません。
             }
         }
 
@@ -4585,7 +4422,9 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                     image: img,
                     aiImage: img, // 両方セットしておくと安全
                     ideology: ideology,
-                    role: "ai" // AIとして動かしたい場合は適宜調整
+                    type: "ai",
+                    brain: {},
+                    recentLines: []
                 };
                 activeMembers.push(newMember); // リストの末尾に追加
                 addBubble("システム", `✨ ${name} が参加しました。`, "", false);
@@ -4617,7 +4456,6 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
             d.innerHTML = `
       <h3>${f.name}</h3>
       🎨 色: ${f.color}<br>
-      ⏳ 設立ターン: ${f.bornTurn}<br>
 
       <div class="faction-leader-wrap">
         <div class="faction-leader-card">
@@ -4641,80 +4479,118 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
         };
 
 
+        // --- 発言のバリエーション確保用：定型フレーズバンク ---
+        // 学習データがまだ少ない時や、生成に失敗した時に「……」の連発を避けるために使う
+        const FALLBACK_LINES = [
+            "うーん、まだそれについてはよく分からないな。",
+            "なるほど、ちょっと考えてみるよ。",
+            "それ、もう少し詳しく聞きたいな。",
+            "面白い視点だね。",
+            "正直、判断に迷うところだ。",
+            "みんなはどう思う？",
+            "今はうまく言葉にできない。",
+            "その話、続きが気になる。"
+        ];
 
-
-
-
-
+        // 簡易的な類似度チェック（完全一致 or 大部分が同じなら「同じ発言」とみなす）
+        function isTooSimilar(a, b) {
+            if (!a || !b) return false;
+            if (a === b) return true;
+            const shorter = a.length < b.length ? a : b;
+            const longer = a.length < b.length ? b : a;
+            if (shorter.length === 0) return false;
+            // 短い方が長い方にほぼ含まれていれば「言い回しを変えただけの同じ内容」とみなす
+            return longer.includes(shorter) && shorter.length / longer.length > 0.6;
+        }
 
         function generate(brain, input, speaker, targetMember) {
             let targetBrain = (brain && Object.keys(brain).length > 0) ? brain : data.brain;
             let keys = Object.keys(targetBrain);
-            if (keys.length === 0) return "......";
+
+            const history = (speaker && speaker.recentLines) ? speaker.recentLines : [];
 
             let res = "";
 
-            // ★重要：最大5回まで作り直すループ
-            for (let attempt = 0; attempt < 5; attempt++) {
+            if (keys.length === 0) {
+                // 脳が空 → 定型フレーズバンクからランダムに選ぶ（同じセリフの連発を防止）
+                let pool = FALLBACK_LINES.filter(p => !history.includes(p));
+                if (pool.length === 0) pool = FALLBACK_LINES;
+                res = pool[Math.floor(Math.random() * pool.length)];
+            } else {
 
-                // --- 1. 開始文字を決める ---
-                let curr = "";
+                // ★重要：最大8回まで作り直すループ（オウム返し・直近との重複を回避）
+                for (let attempt = 0; attempt < 8; attempt++) {
 
-                // 最初の1回だけは「入力文字との繋がり」を意識する（会話っぽくするため）
-                // ただし、2回目以降（リトライ中）は、強制的にランダムな場所から始める
-                if (attempt === 0 && input && input.length >= 2) {
-                    const potentialStarts = [];
-                    for (let i = 0; i < input.length - 1; i++) {
-                        let pair = input[i] + input[i + 1];
-                        if (targetBrain[pair]) potentialStarts.push(pair);
+                    // --- 1. 開始文字を決める ---
+                    let curr = "";
+
+                    // 最初の2回だけは「入力文字との繋がり」を意識する（会話っぽくするため）
+                    // それ以降（リトライ中）は、強制的にランダムな場所から始めてバリエーションを出す
+                    if (attempt < 2 && input && input.length >= 2) {
+                        const potentialStarts = [];
+                        for (let i = 0; i < input.length - 1; i++) {
+                            let pair = input[i] + input[i + 1];
+                            if (targetBrain[pair]) potentialStarts.push(pair);
+                        }
+                        if (potentialStarts.length > 0) {
+                            curr = potentialStarts[Math.floor(Math.random() * potentialStarts.length)];
+                        }
                     }
-                    if (potentialStarts.length > 0) {
-                        curr = potentialStarts[Math.floor(Math.random() * potentialStarts.length)];
+
+                    // 開始位置が決まらなければ（またはリトライ中なら）ランダムで開始
+                    if (!curr) curr = keys[Math.floor(Math.random() * keys.length)];
+
+                    // --- 2. 生成処理 ---
+                    let tempRes = curr;
+                    let tempCurr = curr;
+                    // 文の長さにもランダム性を持たせて単調さを減らす
+                    const maxLen = 12 + Math.floor(Math.random() * 24);
+
+                    for (let i = 0; i < maxLen; i++) {
+                        let nexts = targetBrain[tempCurr];
+                        if (!nexts || nexts.length === 0) break;
+
+                        let nextChar = nexts[Math.floor(Math.random() * nexts.length)];
+                        tempRes += nextChar;
+                        tempCurr = tempCurr.charAt(1) + nextChar; // 2文字ずらし
+
+                        if ("。！？\n".includes(nextChar) && tempRes.length > 8) break;
                     }
+
+                    // --- 3. オウム返し／直近の発言との重複チェック ---
+                    const isEcho = input && (tempRes === input || tempRes.includes(input));
+                    const isRepeatOfHistory = history.some(h => isTooSimilar(h, tempRes));
+
+                    if (isEcho || isRepeatOfHistory) {
+                        continue; // やり直し
+                    }
+
+                    // 問題なければ採用してループを抜ける
+                    res = tempRes;
+                    break;
                 }
 
-                // 開始位置が決まらなければ（またはリトライ中なら）ランダムで開始
-                if (!curr) curr = keys[Math.floor(Math.random() * keys.length)];
-
-                // --- 2. 生成処理 ---
-                let tempRes = curr;
-                let tempCurr = curr;
-
-                for (let i = 0; i < 30; i++) {
-                    let nexts = targetBrain[tempCurr];
-                    if (!nexts || nexts.length === 0) break;
-
-                    let nextChar = nexts[Math.floor(Math.random() * nexts.length)];
-                    tempRes += nextChar;
-                    tempCurr = tempCurr.charAt(1) + nextChar; // 2文字ずらし
-
-                    if ("。！？\n".includes(nextChar) && tempRes.length > 10) break;
+                // 8回やってもダメなら、定型フレーズバンクに逃がす（「......」の連発を防止）
+                if (!res) {
+                    let pool = FALLBACK_LINES.filter(p => !history.includes(p));
+                    res = pool.length ? pool[Math.floor(Math.random() * pool.length)] : FALLBACK_LINES[Math.floor(Math.random() * FALLBACK_LINES.length)];
                 }
-
-                // --- 3. オウム返し判定（ここが重要） ---
-                // 生成結果が「入力と全く同じ」または「入力を含んでいる」場合は失敗とみなす
-                if (input && (tempRes === input || tempRes.includes(input))) {
-                    continue; // やり直し（次のattemptへ）
-                }
-
-                // オウム返しじゃなければ採用してループを抜ける
-                res = tempRes;
-                break;
             }
 
-            // 5回やってもダメなら、諦めて最後に作ったものを出す（無限ループ防止）
-            if (!res) res = "......";
-
-            // --- 暴言・口癖処理（ここは変更なし） ---
+            // --- 暴言・口癖処理 ---
             if (speaker?.faction && targetMember) {
                 const isEnemy = !targetMember.faction || targetMember.faction.name !== speaker.faction.name;
-                if (isEnemy && Math.random() < 0.5) {
+                if (isEnemy && Math.random() < 0.35) {
                     const slurs = ["殺すぞ", "死ねよ", "ゴミめ", "消え失せろ", "の分際で"];
                     res = res.replace(/[。！？\n]$/, "") + slurs[Math.floor(Math.random() * slurs.length)];
                 }
             }
-            if (speaker?.fav && Math.random() < 0.4) {
-                res = res.replace(/[。！？]$/, "") + speaker.fav;
+
+            // --- 発言履歴を記録（直近5件を保持し、次回の重複チェックに使う） ---
+            if (speaker) {
+                if (!speaker.recentLines) speaker.recentLines = [];
+                speaker.recentLines.push(res);
+                if (speaker.recentLines.length > 5) speaker.recentLines.shift();
             }
 
             return res;
@@ -4750,13 +4626,10 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
                 if (uFile) p.push(toBase64(uFile).then(r => data.userImage = r));
                 if (aFile) p.push(toBase64(aFile).then(r => data.aiImage = r));
 
-                Promise.all(p).then(() => {
-                    saveData(); // ここで localStorage.setItem("key", JSON.stringify(data)) を実行している前提
-                    updateUI();
-                    alert("設定を保存しました");
-                });
                 await Promise.all(p);
-                saveData();
+                saveData(); // ここで localStorage.setItem("key", JSON.stringify(data)) を実行している前提
+                updateUI();
+                alert("設定を保存しました");
             } finally {
                 btn.disabled = false;
                 btn.innerText = originalText;
@@ -4774,15 +4647,16 @@ onclick="showPrisonerDetail('${(p.name || "").replace(/'/g, "\\'")}')"
 
                 // 議長設定の復元
                 document.getElementById("chk-chairman").checked = data.chairmanMode || false;
-                data.npcskip = document.getElementById("npc-skip").checked = data.npcskip || false;
-                data.sakoku = document.getElementById("issakoku").checked = data.sakoku || false;
+                document.getElementById("npc-skip").checked = data.npcskip || false;
+                document.getElementById("issakoku").checked = data.sakoku || false;
                 document.getElementById("chairman-title").value = data.chairmanTitle || "議長";
-                document.getElementById("election-mode").value = data.electionMode || "random";
+                document.getElementById("election-mode").value = data.electionMode || "vote";
 
                 // グローバル変数へ同期
                 chairmanMode = data.chairmanMode;
-                chairmanTitle = data.chairmanTitle;
-                electionMode = data.electionMode;
+                chairmanTitle = data.chairmanTitle || "議長";
+                electionMode = data.electionMode || "vote";
+                npcskip = data.npcskip || false;
 
                 console.log("データを復元しました");
             }
